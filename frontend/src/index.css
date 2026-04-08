@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 220 70% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 94%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 15% 92%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 220 60% 96%;
+    --accent-foreground: 220 70% 45%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 220 70% 45%;
+
+    --radius: 0.75rem;
+
+    /* KPI status colors */
+    --kpi-achieved: 152 60% 42%;
+    --kpi-achieved-bg: 152 60% 95%;
+    --kpi-warning: 38 92% 50%;
+    --kpi-warning-bg: 38 92% 95%;
+    --kpi-danger: 0 72% 51%;
+    --kpi-danger-bg: 0 72% 95%;
+
+    /* Chart palette */
+    --chart-1: 220 70% 45%;
+    --chart-2: 152 60% 42%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 72% 51%;
+    --chart-5: 280 60% 55%;
+
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 220 20% 85%;
+    --sidebar-primary: 220 70% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 40% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 222 30% 20%;
+    --sidebar-ring: 220 70% 55%;
+    --sidebar-muted: 220 15% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .kpi-achieved {
+    color: hsl(var(--kpi-achieved));
+  }
+  .kpi-warning {
+    color: hsl(var(--kpi-warning));
+  }
+  .kpi-danger {
+    color: hsl(var(--kpi-danger));
+  }
+  .bg-kpi-achieved {
+    background-color: hsl(var(--kpi-achieved));
+  }
+  .bg-kpi-achieved-light {
+    background-color: hsl(var(--kpi-achieved-bg));
+  }
+  .bg-kpi-warning {
+    background-color: hsl(var(--kpi-warning));
+  }
+  .bg-kpi-warning-light {
+    background-color: hsl(var(--kpi-warning-bg));
+  }
+  .bg-kpi-danger {
+    background-color: hsl(var(--kpi-danger));
+  }
+  .bg-kpi-danger-light {
+    background-color: hsl(var(--kpi-danger-bg));
+  }
+}
