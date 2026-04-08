@@ -2,8 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Bot, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { postChatbot } from "@/api/client";
+import { postMcpChat } from "@/api/client";
 
 interface Message {
   id: number;
@@ -44,13 +43,11 @@ export function ChatbotWidget() {
     setLoading(true);
 
     try {
-      const data = await postChatbot(question);
+      const data = await postMcpChat(question);
       const botMsg: Message = {
         id: Date.now() + 1,
         role: "assistant",
-        content: data.answer,
-        toolUsed: data.tool_used,
-        contextSummary: data.context_summary,
+        content: data.response,
       };
       setMessages((prev) => [...prev, botMsg]);
     } catch {
@@ -95,45 +92,41 @@ export function ChatbotWidget() {
             </button>
           </div>
 
-          {/* Messages */}
-          <ScrollArea className="flex-1 min-h-0">
-            <div ref={scrollRef} className="p-4 space-y-4">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  {msg.role === "assistant" && (
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <Bot className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                  )}
-                  <div className={`max-w-[85%] ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-accent"} rounded-xl px-3 py-2`}>
-                    <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                    {msg.contextSummary && (
-                      <p className="text-[9px] opacity-50 mt-1 border-t border-border/30 pt-1">
-                        📊 {msg.contextSummary}
-                      </p>
-                    )}
-                  </div>
-                  {msg.role === "user" && (
-                    <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                      <User className="w-3.5 h-3.5 text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {loading && (
-                <div className="flex gap-2 justify-start">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          {/* Messages — scrollable container */}
+          <div
+            ref={scrollRef}
+            className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4"
+          >
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                {msg.role === "assistant" && (
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <Bot className="w-3.5 h-3.5 text-primary" />
                   </div>
-                  <div className="bg-accent rounded-xl px-3 py-2 flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                    <span className="text-xs text-muted-foreground">Analyzing KPI data...</span>
-                  </div>
+                )}
+                <div className={`max-w-[85%] ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-accent"} rounded-xl px-3 py-2`}>
+                  <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 </div>
-              )}
-            </div>
-          </ScrollArea>
+                {msg.role === "user" && (
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {loading && (
+              <div className="flex gap-2 justify-start">
+                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-primary" />
+                </div>
+                <div className="bg-accent rounded-xl px-3 py-2 flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                  <span className="text-xs text-muted-foreground">Analyzing KPI data...</span>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Suggestions */}
           {messages.length === 1 && (

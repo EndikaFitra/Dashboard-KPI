@@ -16,18 +16,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _seed_default_admin():
+    """Create default admin user if none exists (runs once on startup)."""
+    from app.database import SessionLocal
+    from models.user import User
+    from services.security import hash_password
+
+    db = SessionLocal()
+    try:
+        if db.query(User).filter(User.role == "admin").count() == 0:
+            admin = User(
+                username="admin",
+                email="admin@kpi.local",
+                password_hash=hash_password("admin123"),
+                role="admin",
+            )
+            db.add(admin)
+            db.commit()
+            logger.info("Default admin user created: admin / admin123")
+    except Exception as exc:
+        logger.error(f"Failed to seed admin: {exc}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("KPI Analytics API starting up...")
     from app.database import engine, Base
-    import models.division      # noqa
-    import models.kpi           # noqa
-    import models.period        # noqa
-    import models.mapping       # noqa
-    import models.fact_raw      # noqa
+    import models.division       # noqa
+    import models.kpi            # noqa
+    import models.period         # noqa
+    import models.mapping        # noqa
+    import models.fact_raw       # noqa
     import models.fact_quarterly # noqa
+    import models.user           # noqa  ← NEW
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ensured.")
+    _seed_default_admin()
     yield
     logger.info("KPI Analytics API shutting down.")
 
@@ -47,12 +73,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from routers import dashboard, kpi, chatbot, mcp  # noqa
+from routers import dashboard, kpi, chatbot, mcp, auth, admin  # noqa
 
 app.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
-app.include_router(kpi.router, prefix="/kpi", tags=["KPI"])
-app.include_router(chatbot.router, prefix="/chatbot", tags=["Chatbot"])
-app.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
+app.include_router(kpi.router,       prefix="/kpi",       tags=["KPI"])
+app.include_router(chatbot.router,   prefix="/chatbot",   tags=["Chatbot"])
+app.include_router(mcp.router,       prefix="/mcp",       tags=["MCP"])
+app.include_router(auth.router,      prefix="/auth",      tags=["Auth"])
+app.include_router(admin.router,     prefix="/admin",     tags=["Admin"])
 
 
 @app.get("/", tags=["Health"])

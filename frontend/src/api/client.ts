@@ -1,12 +1,42 @@
 import axios from "axios";
+import { getToken, logout } from "@/lib/auth";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const MCP_BASE = import.meta.env.VITE_MCP_URL || "http://localhost:8001";
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
   timeout: 30000,
 });
+
+// MCP Server client — chatbot calls FastMCP directly
+const mcp = axios.create({
+  baseURL: MCP_BASE,
+  headers: { "Content-Type": "application/json" },
+  timeout: 120000,
+});
+
+// ── Auto-attach JWT token to every request ─────────────────────────────── //
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// ── Auto-logout on 401 ─────────────────────────────────────────────────── //
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      logout();
+      window.location.href = "/login";
+    }
+    return Promise.reject(err);
+  }
+);
 
 // ── Dashboard ──────────────────────────────────────────────────────────── //
 
@@ -104,24 +134,59 @@ export const getTrend = (divisionId: number, year = 2025) =>
 export const getUnderperform = (year = 2025) =>
   api.get<UnderperformData>(`/dashboard/underperform?year=${year}`).then((r) => r.data);
 
-// ── Chatbot ────────────────────────────────────────────────────────────── //
+// ── FastMCP Chat (port 8001) ───────────────────────────────────────────── //
 
-export interface ChatbotResponse {
-  question: string;
-  answer: string;
-  tool_used: string;
-  context_summary: string;
+export interface McpChatResponse {
+  response: string;
+  model: string;
 }
 
-export const postChatbot = (question: string) =>
-  api.post<ChatbotResponse>("/chatbot", { question }).then((r) => r.data);
+export const postMcpChat = (message: string, year = 2025) =>
+  mcp.post<McpChatResponse>("/chat", { message, year }).then((r) => r.data);
 
-// ── MCP ───────────────────────────────────────────────────────────────── //
+export const getMcpHealth = () => mcp.get("/").then((r) => r.data);
+export const getMcpTools = () => mcp.get("/tools").then((r) => r.data);
 
-export const callMcpTool = (tool: string, params: Record<string, unknown> = {}) =>
-  api.post("/mcp/tools", { tool, params }).then((r) => r.data);
+// ── Auth ───────────────────────────────────────────────────────────────── //
 
-// ── KPI Realization ────────────────────────────────────────────────────── //
+export interface LoginPayload { username: string; password: string }
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  role: string;
+  username: string;
+}
+export interface UserResponse {
+  user_id: number;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+export interface UserCreatePayload {
+  username: string;
+  email: string;
+  password: string;
+  role: string;
+}
+
+export const postLogin = (payload: LoginPayload) =>
+  api.post<TokenResponse>("/auth/login", payload).then((r) => r.data);
+
+export const getMe = () =>
+  api.get<UserResponse>("/auth/me").then((r) => r.data);
+
+// ── Admin ──────────────────────────────────────────────────────────────── //
+
+export interface KpiPayload {
+  division_id: number;
+  kpi_name: string;
+  unit: string;
+  visualization_type: string;
+  default_target: number;
+  weight: number;
+}
 
 export interface RealizationPayload {
   division_id: number;
@@ -132,8 +197,79 @@ export interface RealizationPayload {
   realization: number;
 }
 
-export const postRealization = (payload: RealizationPayload) =>
-  api.post("/kpi/realization", payload).then((r) => r.data);
+export interface EtlPayload { year: number; all_years: boolean }
 
-export const putRealization = (id: number, payload: Partial<RealizationPayload>) =>
-  api.put(`/kpi/realization/${id}`, payload).then((r) => r.data);
+export const adminGetKpi = (division_id?: number) =>
+  api.get("/admin/kpi", { params: division_id ? { division_id } : {} }).then((r) => r.data);
+
+export const adminPostKpi = (payload: KpiPayload) =>
+  api.post("/admin/kpi", payload).then((r) => r.data);
+
+export const adminPutKpi = (id: number, payload: Partial<KpiPayload>) =>
+  api.put(`/admin/kpi/${id}`, payload).then((r) => r.data);
+
+export const adminDeleteKpi = (id: number) =>
+  api.delete(`/admin/kpi/${id}`);
+
+export const adminPostRealization = (payload: RealizationPayload) =>
+  api.post("/admin/realization", payload).then((r) => r.data);
+
+export const adminPutRealization = (id: number, payload: Partial<RealizationPayload>) =>
+  api.put(`/admin/realization/${id}`, payload).then((r) => r.data);
+
+export const adminRunEtl = (payload: EtlPayload) =>
+  api.post("/admin/run-etl", payload).then((r) => r.data);
+
+export const adminGetUsers = () =>
+  api.get<UserResponse[]>("/admin/users").then((r) => r.data);
+
+export const adminPostUser = (payload: UserCreatePayload) =>
+  api.post<UserResponse>("/admin/users", payload).then((r) => r.data);
+
+export const adminPatchUser = (id: number, payload: { is_active?: boolean; role?: string }) =>
+  api.patch<UserResponse>(`/admin/users/${id}`, payload).then((r) => r.data);
+
+export const adminDeleteUser = (id: number) =>
+  api.delete(`/admin/users/${id}`);
+
+// ── Admin Meta (reference data for forms) ─────────────────────────────── //
+
+export interface DivisionMeta {
+  division_id: number;
+  division_name: string;
+  evaluation_period: string; // M | Q | H
+}
+
+export interface PeriodMeta {
+  period_id: number;
+  period_name: string;
+  period_type: string;
+  period_order: number;
+}
+
+export interface RealizationRecord {
+  fact_id: number;
+  division_id: number;
+  kpi_id: number;
+  kpi_name: string;
+  period_id: number;
+  period_name: string;
+  year: number;
+  target: number;
+  realization: number;
+  achievement: number;
+}
+
+export const adminGetDivisions = () =>
+  api.get<DivisionMeta[]>("/admin/meta/divisions").then((r) => r.data);
+
+export const adminGetPeriods = (period_type?: string) =>
+  api.get<PeriodMeta[]>("/admin/meta/periods", {
+    params: period_type ? { period_type } : {},
+  }).then((r) => r.data);
+
+export const adminGetRealizations = (params: {
+  division_id?: number;
+  kpi_id?: number;
+  year?: number;
+}) => api.get<RealizationRecord[]>("/admin/meta/realizations", { params }).then((r) => r.data);

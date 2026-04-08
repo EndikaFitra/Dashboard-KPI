@@ -161,49 +161,133 @@ def get_division_kpi(db: Session, division_id: int, year: int) -> Dict[str, Any]
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# TOOL 3: Trend — weighted avg per quarter, current vs previous year          #
+# TOOL 3: Trend — respects evaluation_period (M/Q/H)                          #
 # ─────────────────────────────────────────────────────────────────────────── #
 def get_kpi_trend(db: Session, division_id: int, year: int) -> Dict[str, Any]:
-    div_sql = text("SELECT division_name FROM dim_division WHERE division_id = :did")
+    div_sql = text("""
+        SELECT division_name, evaluation_period
+        FROM dim_division WHERE division_id = :did
+    """)
     div = db.execute(div_sql, {"did": division_id}).fetchone()
     if not div:
         return {"error": f"Division {division_id} not found"}
 
-    sql = text("""
-        SELECT
-            fq.quarter,
-            fq.year,
-            fq.achievement,
-            k.weight
-        FROM fact_kpi_quarterly fq
-        JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
-        WHERE fq.division_id = :did AND fq.year IN (:year, :prev_year)
-        ORDER BY fq.year, fq.quarter
-    """)
-    rows = db.execute(sql, {
-        "did": division_id, "year": year, "prev_year": year - 1
-    }).fetchall()
+    eval_period = div.evaluation_period  # 'M', 'Q', or 'H'
 
-    # Group: (year, quarter) → list of (achievement, weight)
-    groups: dict = defaultdict(list)
-    for r in rows:
-        groups[(r.year, r.quarter)].append((r.achievement, r.weight))
+    # ── Monthly (HR Officer) ────────────────────────────────────────────── #
+    if eval_period == "M":
+        sql = text("""
+            SELECT
+                p.period_name,
+                p.period_order,
+                f.year,
+                CASE WHEN f.target > 0
+                     THEN (f.realization / f.target) * 100
+                     ELSE 0
+                END AS achievement,
+                k.weight
+            FROM fact_kpi_performance f
+            JOIN dim_period p  ON f.period_id  = p.period_id
+            JOIN dim_kpi    k  ON f.kpi_id     = k.kpi_id
+            WHERE f.division_id = :did
+              AND f.year IN (:year, :prev_year)
+              AND p.period_type = 'M'
+            ORDER BY f.year, p.period_order
+        """)
+        rows = db.execute(sql, {
+            "did": division_id, "year": year, "prev_year": year - 1
+        }).fetchall()
 
-    current, previous = [], []
-    for (yr, quarter), vals in sorted(groups.items()):
-        achievements = [v[0] for v in vals]
-        weights      = [v[1] for v in vals]
-        avg = round(_weighted_avg(achievements, weights), 2)
-        point = {"period": quarter, "achievement": avg, "year": yr}
-        if yr == year:
-            current.append(point)
-        else:
-            previous.append(point)
+        groups: dict = defaultdict(list)
+        for r in rows:
+            groups[(r.year, r.period_order, r.period_name)].append(
+                (r.achievement, r.weight)
+            )
+
+        current, previous = [], []
+        for (yr, order, name), vals in sorted(groups.items()):
+            achievements = [v[0] for v in vals]
+            weights      = [v[1] for v in vals]
+            avg = round(_weighted_avg(achievements, weights), 2)
+            point = {"period": name, "achievement": avg, "year": yr}
+            if yr == year:
+                current.append(point)
+            else:
+                previous.append(point)
+
+    # ── Half Year (Network) ─────────────────────────────────────────────── #
+    elif eval_period == "H":
+        # Aggregate Q1+Q2 → H1, Q3+Q4 → H2
+        sql = text("""
+            SELECT
+                fq.quarter,
+                fq.year,
+                fq.achievement,
+                k.weight
+            FROM fact_kpi_quarterly fq
+            JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
+            WHERE fq.division_id = :did AND fq.year IN (:year, :prev_year)
+            ORDER BY fq.year, fq.quarter
+        """)
+        rows = db.execute(sql, {
+            "did": division_id, "year": year, "prev_year": year - 1
+        }).fetchall()
+
+        HALF_MAP = {"Q1": "H1", "Q2": "H1", "Q3": "H2", "Q4": "H2"}
+        HALF_ORDER = {"H1": 1, "H2": 2}
+
+        groups: dict = defaultdict(list)
+        for r in rows:
+            half = HALF_MAP.get(r.quarter, "H1")
+            groups[(r.year, half)].append((r.achievement, r.weight))
+
+        current, previous = [], []
+        for (yr, half), vals in sorted(groups.items(), key=lambda x: (x[0][0], HALF_ORDER.get(x[0][1], 0))):
+            achievements = [v[0] for v in vals]
+            weights      = [v[1] for v in vals]
+            avg = round(_weighted_avg(achievements, weights), 2)
+            point = {"period": half, "achievement": avg, "year": yr}
+            if yr == year:
+                current.append(point)
+            else:
+                previous.append(point)
+
+    # ── Quarterly (Software Engineer, Sales Executive) ──────────────────── #
+    else:
+        sql = text("""
+            SELECT
+                fq.quarter,
+                fq.year,
+                fq.achievement,
+                k.weight
+            FROM fact_kpi_quarterly fq
+            JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
+            WHERE fq.division_id = :did AND fq.year IN (:year, :prev_year)
+            ORDER BY fq.year, fq.quarter
+        """)
+        rows = db.execute(sql, {
+            "did": division_id, "year": year, "prev_year": year - 1
+        }).fetchall()
+
+        groups: dict = defaultdict(list)
+        for r in rows:
+            groups[(r.year, r.quarter)].append((r.achievement, r.weight))
+
+        current, previous = [], []
+        for (yr, quarter), vals in sorted(groups.items()):
+            achievements = [v[0] for v in vals]
+            weights      = [v[1] for v in vals]
+            avg = round(_weighted_avg(achievements, weights), 2)
+            point = {"period": quarter, "achievement": avg, "year": yr}
+            if yr == year:
+                current.append(point)
+            else:
+                previous.append(point)
 
     return {
-        "division_id":   division_id,
-        "division_name": div.division_name,
-        "current_year":  year,
+        "division_id":    division_id,
+        "division_name":  div.division_name,
+        "current_year":   year,
         "current_trend":  current,
         "previous_trend": previous,
     }

@@ -52,18 +52,7 @@ Output yang diharapkan:
 ```
 NAME           STATUS
 kpi_postgres   Up (healthy)
-kpi_pgadmin    Up
 ```
-
-**pgAdmin** tersedia di: http://localhost:5050  
-- Email: `admin@kpi.local`  
-- Password: `admin123`
-
-Tambahkan server di pgAdmin:
-- Host: `kpi_postgres` (nama container) atau `host.docker.internal`
-- Port: `5432`
-- DB: `kpi_warehouse`
-- User: `kpi_user` / Pass: `kpi_pass`
 
 ---
 
@@ -187,12 +176,43 @@ ollama pull qwen3:4b-instruct
 ollama serve
 ```
 
-Cek model tersedia:
+> Jika Ollama tidak running, API tetap berjalan normal — chatbot akan mengembalikan pesan error koneksi, dashboard tidak terpengaruh.
+
+---
+
+## Langkah 6b — Jalankan FastMCP Server (Chatbot Engine)
+
+> **Terminal terpisah** dari FastAPI. Pastikan venv aktif.
+
 ```bash
-ollama list
+cd projek_kp_2/backend
+python mcp_server.py
 ```
 
-> Jika Ollama tidak running, API tetap berjalan normal — chatbot akan mengembalikan pesan error koneksi, dashboard tidak terpengaruh.
+Output:
+```
+INFO  __main__ -- Starting FastMCP Chat Server on port 8001
+INFO  __main__ -- Ollama: http://localhost:11434 | Model: qwen3:4b-instruct
+INFO  uvicorn -- Application startup complete.
+INFO  uvicorn -- Uvicorn running on http://0.0.0.0:8001
+```
+
+Verifikasi:
+```bash
+# Health check
+curl http://localhost:8001/
+
+# Daftar tools
+curl http://localhost:8001/tools
+
+# Test chatbot
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "overview KPI 2025", "year": 2025}'
+```
+
+> FastMCP server (port 8001) menangani chatbot secara mandiri menggunakan Ollama native tool calling.
+> Dashboard data tetap dilayani oleh FastAPI (port 8000).
 
 ---
 
@@ -217,7 +237,7 @@ Frontend tersedia di: **http://localhost:8080**
 Gunakan browser, curl, atau Postman:
 
 ```bash
-# Health check
+# Health check FastAPI
 curl http://localhost:8000/
 
 # Overview dashboard 2025
@@ -232,29 +252,17 @@ curl "http://localhost:8000/dashboard/trend/1?year=2025"
 # KPI underperform
 curl "http://localhost:8000/dashboard/underperform?year=2025"
 
-# MCP tools — list
-curl http://localhost:8000/mcp/tools
+# Health check FastMCP server
+curl http://localhost:8001/
 
-# MCP tools — call
-curl -X POST http://localhost:8000/mcp/tools \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "get_overview_kpi", "params": {"year": 2025}}'
+# Daftar MCP tools
+curl http://localhost:8001/tools
 
-# MCP tools — compare divisions
-curl -X POST http://localhost:8000/mcp/tools \
+# Test chatbot (FastMCP)
+curl -X POST http://localhost:8001/chat \
   -H "Content-Type: application/json" \
-  -d '{"tool": "compare_divisions", "params": {"year": 2025}}'
-
-# Chatbot
-curl -X POST http://localhost:8000/chatbot \
-  -H "Content-Type: application/json" \
-  -d '{"question": "Divisi mana yang paling underperform di 2025?"}'
-
-# Input data baru
-curl -X POST http://localhost:8000/kpi/realization \
-  -H "Content-Type: application/json" \
-  -d '{"division_id": 1, "kpi_id": 1, "period_id": 1, "year": 2026, "target": 1.0, "realization": 0.9}'
-```
+  -d '{"message": "Divisi mana yang paling underperform di 2025?", "year": 2025}'
+````
 
 ---
 
@@ -309,8 +317,18 @@ python etl_runner.py --year 2026
 ### Chatbot: "Cannot connect to Ollama"
 - Jalankan `ollama serve` di terminal terpisah
 - Cek: `curl http://localhost:11434/api/tags`
+- Pastikan `mcp_server.py` juga sudah running (port 8001)
+
+### Chatbot: "Tool error"
+- Periksa log di terminal `mcp_server.py`
+- Pastikan PostgreSQL accessible dari backend (`DATABASE_URL` di `.env` benar)
+
+### FastMCP server gagal start
+- Pastikan `fastmcp` sudah terinstall: `pip install fastmcp`
+- Cek port 8001 tidak dipakai: `netstat -an | findstr 8001`
 
 ### Frontend: data tidak muncul
 - Pastikan FastAPI running di port 8000
+- Pastikan FastMCP server running di port 8001 (untuk chatbot)
 - Cek CORS — sudah diset `allow_origins=["*"]`
-- Buka DevTools → Network, lihat response dari `/dashboard/overview`
+- Buka DevTools -> Network, lihat response dari `/dashboard/overview`

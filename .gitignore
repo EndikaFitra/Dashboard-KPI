@@ -1,0 +1,119 @@
+# ============================================================
+# Root .gitignore — KPI Analytics Project
+# ============================================================
+
+# ── Python / Backend ──────────────────────────────────────── #
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env.local
+
+# Environment variables (contains secrets!)
+# backend/.env
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# mypy / pyright
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+
+# Alembic versions (keep structure, ignore auto-generated)
+# backend/alembic/versions/*.py  # uncomment if needed
+
+# ── Node / Frontend ───────────────────────────────────────── #
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.local/
+
+# Build output
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Docker ────────────────────────────────────────────────── #
+# Keep docker-compose.yml but ignore overrides with local secrets
+docker-compose.override.yml
+docker-compose.local.yml
+
+# ── Database / Data ───────────────────────────────────────── #
+*.sqlite3
+*.db
+*.sql.bak
+data/raw/
+data/temp/
+dumps/
+
+# ── IDE / Editor ──────────────────────────────────────────── #
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── OS ────────────────────────────────────────────────────── #
+.DS_Store
+.AppleDouble
+.LSOverride
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# ── Secrets / Config ─────────────────────────────────────── #
+*.pem
+*.key
+*.crt
+*.p12
+secrets.json
+secrets.yaml
+*.secret
+
+# ── Jupyter ───────────────────────────────────────────────── #
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Misc ─────────────────────────────────────────────────── #
+.cache/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+.antigravity/
