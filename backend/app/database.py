@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kpi_user:kpi_pass@localhost:5432/kpi_warehouse")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kpi_user:kpi_pass@192.168.163.128:5432/kpi_warehouse")
 
 engine = create_engine(
     DATABASE_URL,
