@@ -53,8 +53,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b-instruct")
+GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 MCP_PORT     = int(os.getenv("MCP_PORT", "8001"))
 
 
@@ -125,9 +126,9 @@ TOOL_REGISTRY: dict = {
 
 
 # --------------------------------------------------------------------------- #
-# Tool schemas untuk Ollama API
+# Tool schemas untuk Groq API
 # --------------------------------------------------------------------------- #
-OLLAMA_TOOLS = [
+GROQ_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -229,13 +230,13 @@ ATURAN PENTING:
 
 
 # --------------------------------------------------------------------------- #
-# Ollama Tool Calling Loop
+# Groq Tool Calling Loop
 # --------------------------------------------------------------------------- #
 async def run_chat_loop(question: str, year: int) -> str:
     """
-    Kirim pertanyaan ke Ollama dengan tool definitions.
-    Jika Ollama memanggil tool, eksekusi fungsi Python asli dan feed hasilnya kembali.
-    Ulangi hingga Ollama menghasilkan jawaban final (tanpa tool_calls).
+    Kirim pertanyaan ke Groq dengan tool definitions.
+    Jika Groq memanggil tool, eksekusi fungsi Python asli dan feed hasilnya kembali.
+    Ulangi hingga Groq menghasilkan jawaban final (tanpa tool_calls).
     """
     # Prioritaskan tahun yang disebutkan user dalam teks pertanyaan
     year = _extract_year_from_text(question, year)
@@ -246,54 +247,59 @@ async def run_chat_loop(question: str, year: int) -> str:
         {"role": "user",   "content": f"{question} (gunakan data tahun: {year})"},
     ]
 
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
     async with httpx.AsyncClient(timeout=120.0) as client:
         for iteration in range(5):
-            logger.info(f"Ollama iteration {iteration + 1}, messages={len(messages)}")
+            logger.info(f"Groq iteration {iteration + 1}, messages={len(messages)}")
 
             resp = await client.post(
-                f"{OLLAMA_URL}/api/chat",
+                f"{GROQ_API_URL}/chat/completions",
+                headers=headers,
                 json={
-                    "model":    OLLAMA_MODEL,
+                    "model":    GROQ_MODEL,
                     "messages": messages,
-                    "tools":    OLLAMA_TOOLS,
-                    "stream":   False,
+                    "tools":    GROQ_TOOLS,
+                    "tool_choice": "auto",
                 },
             )
             resp.raise_for_status()
             data = resp.json()
             
-            eval_count = data.get("eval_count", 0)
-            prompt_count = data.get("prompt_eval_count", 0)
-            duration_ms = data.get("total_duration", 0) / 1_000_000
+            usage = data.get("usage", {})
+            prompt_count = usage.get("prompt_tokens", 0)
+            eval_count = usage.get("completion_tokens", 0)
+            duration_ms = usage.get("total_time", 0) * 1000 if "total_time" in usage else 0
             
             if eval_count > 0 or prompt_count > 0:
                 logger.info(f"  [Metrics] Tokens: {prompt_count} prompt + {eval_count} eval | Model Time: {duration_ms:.2f} ms")
 
-            msg        = data.get("message", {})
+            choices = data.get("choices", [])
+            if not choices:
+                return "Tidak ada respons dari model."
+
+            msg = choices[0].get("message", {})
             tool_calls = msg.get("tool_calls") or []
 
             if not tool_calls:
                 # Tidak ada tool_calls -> jawaban final
-                return msg.get("content", "Tidak ada respons dari model.")
+                return msg.get("content") or "Tidak ada respons dari model."
 
             # Simpan giliran asisten + tool_calls ke history
-            messages.append({
-                "role":       "assistant",
-                "content":    msg.get("content", ""),
-                "tool_calls": tool_calls,
-            })
+            messages.append(msg)
 
             # Eksekusi setiap tool call
             for tc in tool_calls:
                 fn_name = tc.get("function", {}).get("name", "")
-                fn_args = tc.get("function", {}).get("arguments", {})
+                fn_args_str = tc.get("function", {}).get("arguments", "{}")
 
-                # Ollama kadang kirim arguments sebagai string JSON
-                if isinstance(fn_args, str):
-                    try:
-                        fn_args = json.loads(fn_args)
-                    except Exception:
-                        fn_args = {}
+                try:
+                    fn_args = json.loads(fn_args_str)
+                except Exception:
+                    fn_args = {}
 
                 # Isi year default jika tidak ada
                 if "year" not in fn_args:
@@ -312,8 +318,9 @@ async def run_chat_loop(question: str, year: int) -> str:
                     result = {"error": f"Tool tidak ditemukan: {fn_name}"}
 
                 messages.append({
-                    "role":    "tool",
-                    "name":    fn_name,
+                    "role": "tool",
+                    "tool_call_id": tc.get("id"),
+                    "name": fn_name,
                     "content": json.dumps(result, ensure_ascii=False, default=str),
                 })
 
@@ -353,7 +360,7 @@ def health():
     return {
         "status": "ok",
         "server": "KPI FastMCP Chat Server",
-        "model":  OLLAMA_MODEL,
+        "model":  GROQ_MODEL,
         "port":   MCP_PORT,
         "tools":  list(TOOL_REGISTRY.keys()),
     }
@@ -369,7 +376,7 @@ def list_tools():
                 "description": t["function"]["description"],
                 "parameters":  t["function"]["parameters"],
             }
-            for t in OLLAMA_TOOLS
+            for t in GROQ_TOOLS
         ]
     }
 
@@ -384,24 +391,24 @@ async def chat(req: ChatRequest):
     logger.info(f"Chat: '{req.message}' year={req.year}")
     try:
         answer = await run_chat_loop(req.message, req.year)
-        return ChatResponse(response=answer, model=OLLAMA_MODEL)
+        return ChatResponse(response=answer, model=GROQ_MODEL)
 
     except httpx.ConnectError:
         msg = (
-            f"Tidak dapat terhubung ke Ollama di {OLLAMA_URL}. "
-            "Pastikan `ollama serve` sudah berjalan."
+            f"Tidak dapat terhubung ke Groq API di {GROQ_API_URL}. "
+            "Pastikan koneksi internet stabil."
         )
         logger.error(msg)
-        return ChatResponse(response=msg, model=OLLAMA_MODEL)
+        return ChatResponse(response=msg, model=GROQ_MODEL)
 
     except httpx.HTTPStatusError as exc:
-        msg = f"Ollama error {exc.response.status_code}: {exc.response.text[:200]}"
+        msg = f"Groq error {exc.response.status_code}: {exc.response.text[:200]}"
         logger.error(msg)
-        return ChatResponse(response=msg, model=OLLAMA_MODEL)
+        return ChatResponse(response=msg, model=GROQ_MODEL)
 
     except Exception as exc:
         logger.error(f"Chat error: {exc}", exc_info=True)
-        return ChatResponse(response=f"Server error: {str(exc)}", model=OLLAMA_MODEL)
+        return ChatResponse(response=f"Server error: {str(exc)}", model=GROQ_MODEL)
 
 
 # --------------------------------------------------------------------------- #
@@ -409,5 +416,5 @@ async def chat(req: ChatRequest):
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     logger.info(f"Starting FastMCP Chat Server on port {MCP_PORT}")
-    logger.info(f"Ollama: {OLLAMA_URL} | Model: {OLLAMA_MODEL}")
+    logger.info(f"Groq API: {GROQ_API_URL} | Model: {GROQ_MODEL}")
     uvicorn.run(app, host="0.0.0.0", port=MCP_PORT, log_level="info")
