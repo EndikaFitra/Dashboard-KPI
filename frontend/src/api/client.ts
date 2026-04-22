@@ -122,6 +122,9 @@ export interface UnderperformData {
   items: UnderperformItem[];
 }
 
+export const getAvailableYears = () =>
+  api.get<number[]>("/dashboard/years").then((r) => r.data);
+
 export const getOverview = (year = 2025) =>
   api.get<OverviewData>(`/dashboard/overview?year=${year}`).then((r) => r.data);
 
@@ -216,6 +219,9 @@ export const adminPostRealization = (payload: RealizationPayload) =>
 
 export const adminPutRealization = (id: number, payload: Partial<RealizationPayload>) =>
   api.put(`/admin/realization/${id}`, payload).then((r) => r.data);
+
+export const adminDeleteRealization = (id: number) =>
+  api.delete(`/admin/realization/${id}`);
 
 export const adminRunEtl = (payload: EtlPayload) =>
   api.post("/admin/run-etl", payload).then((r) => r.data);

@@ -21,7 +21,10 @@ export function TargetVsRealizationChart({ kpis }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 91%)" />
           <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+          <Tooltip
+            contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+            formatter={(value: number) => [Number(value).toFixed(2), ""]}
+          />
           <Legend />
           <Bar dataKey="Target" fill="hsl(220 70% 45%)" radius={[4, 4, 0, 0]} />
           <Bar dataKey="Realization" fill="hsl(152 60% 42%)" radius={[4, 4, 0, 0]} />

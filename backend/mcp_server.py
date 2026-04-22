@@ -15,9 +15,13 @@ Endpoints:
 """
 
 import os
+import re
 import sys
 import json
 import logging
+from datetime import datetime
+
+CURRENT_YEAR = datetime.now().year
 
 import httpx
 import uvicorn
@@ -64,6 +68,18 @@ def _db_call(fn, *args, **kwargs):
         return fn(db, *args, **kwargs)
     finally:
         db.close()
+
+
+def _extract_year_from_text(text: str, fallback: int) -> int:
+    """
+    Scan teks untuk angka tahun 4 digit (2020-2099).
+    Jika ditemukan, gunakan tahun yang disebutkan user.
+    Jika tidak ada, kembalikan fallback.
+    """
+    matches = re.findall(r'\b(20[2-9]\d)\b', text)
+    if matches:
+        return int(matches[-1])  # gunakan tahun terakhir yang disebutkan
+    return fallback
 
 
 # --------------------------------------------------------------------------- #
@@ -201,11 +217,13 @@ Divisi perusahaan:
 - Sales Executive (ID=3): evaluasi Quarter, bobot: MRR 60%, Customer Baru 30%, Quotation 10%
 - HR Officer (ID=4): evaluasi Monthly, semua KPI bobot 20% masing-masing
 
-Aturan:
+ATURAN PENTING:
 - SELALU panggil tool terlebih dahulu sebelum menjawab
+- Jika user menyebutkan tahun tertentu (misal 2026, 2024), GUNAKAN tahun tersebut sebagai parameter `year` saat memanggil tool. JANGAN gunakan tahun lain.
+- Jika user tidak menyebutkan tahun, gunakan tahun yang tercantum di konteks pesan (tahun: XXXX)
 - Gunakan Bahasa Indonesia yang ringkas dan profesional
-- Achievement >=100% = On Track, 80-99% = Warning, <80% = Danger
-- Format angka dengan jelas (persentase, IDR, dll)
+- Achievement >=100% = On Progress
+- Format angka dengan jelas (persentase, IDR, unit, dll)
 - Fokus pada insight yang actionable
 """
 
@@ -219,9 +237,13 @@ async def run_chat_loop(question: str, year: int) -> str:
     Jika Ollama memanggil tool, eksekusi fungsi Python asli dan feed hasilnya kembali.
     Ulangi hingga Ollama menghasilkan jawaban final (tanpa tool_calls).
     """
+    # Prioritaskan tahun yang disebutkan user dalam teks pertanyaan
+    year = _extract_year_from_text(question, year)
+    logger.info(f"Effective year for this chat: {year}")
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": f"{question} (tahun: {year})"},
+        {"role": "user",   "content": f"{question} (gunakan data tahun: {year})"},
     ]
 
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -239,6 +261,13 @@ async def run_chat_loop(question: str, year: int) -> str:
             )
             resp.raise_for_status()
             data = resp.json()
+            
+            eval_count = data.get("eval_count", 0)
+            prompt_count = data.get("prompt_eval_count", 0)
+            duration_ms = data.get("total_duration", 0) / 1_000_000
+            
+            if eval_count > 0 or prompt_count > 0:
+                logger.info(f"  [Metrics] Tokens: {prompt_count} prompt + {eval_count} eval | Model Time: {duration_ms:.2f} ms")
 
             msg        = data.get("message", {})
             tool_calls = msg.get("tool_calls") or []
@@ -311,7 +340,7 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     message: str
-    year: int = 2025
+    year: int = CURRENT_YEAR  # default tahun berjalan, bukan hardcode 2025
 
 
 class ChatResponse(BaseModel):

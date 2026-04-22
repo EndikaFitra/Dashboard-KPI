@@ -1,10 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  getAvailableYears,
   getOverview,
   getDivision,
   getTrend,
   getUnderperform,
 } from "@/api/client";
+
+// ── Available years (dynamic from DB) ─────────────────────────────────────── //
+export function useAvailableYears() {
+  return useQuery<number[]>({
+    queryKey: ["available-years"],
+    queryFn: getAvailableYears,
+    staleTime: 5 * 60_000, // 5 min — years don't change often
+    placeholderData: [new Date().getFullYear()],
+  });
+}
 
 // ── Overview ───────────────────────────────────────────────────────────── //
 export function useOverview(year = 2025) {

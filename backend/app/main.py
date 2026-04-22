@@ -40,6 +40,44 @@ def _seed_default_admin():
         db.close()
 
 
+
+def _reset_sequences():
+    """
+    Sync PostgreSQL auto-increment sequences with the actual max ID in each table.
+    Prevents 'duplicate key' errors that occur when rows were inserted with
+    explicit IDs (e.g. during seeding/ETL), bypassing the sequence counter.
+    """
+    from app.database import SessionLocal
+    from sqlalchemy import text
+
+    # table_name → (sequence_name, primary_key_column)
+    tables = [
+        ("dim_kpi",              "dim_kpi_kpi_id_seq",              "kpi_id"),
+        ("dim_division",         "dim_division_division_id_seq",     "division_id"),
+        ("dim_period",           "dim_period_period_id_seq",         "period_id"),
+        ("fact_kpi_performance", "fact_kpi_performance_fact_id_seq", "fact_id"),
+        ("fact_kpi_quarterly",   "fact_kpi_quarterly_id_seq",        "id"),
+        ("users",                "users_id_seq",                     "id"),
+    ]
+    db = SessionLocal()
+    try:
+        for table, seq, pk in tables:
+            try:
+                db.execute(text(
+                    f"SELECT setval('{seq}', COALESCE((SELECT MAX({pk}) FROM {table}), 0) + 1, false)"
+                ))
+            except Exception as e:
+                # Sequence or table may not exist yet — skip silently
+                logger.debug(f"Sequence reset skipped for {seq}: {e}")
+        db.commit()
+        logger.info("PostgreSQL sequences synced.")
+    except Exception as exc:
+        logger.error(f"Failed to reset sequences: {exc}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("KPI Analytics API starting up...")
@@ -54,6 +92,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ensured.")
     _seed_default_admin()
+    _reset_sequences()   # ← fix duplicate key errors after seeding
     yield
     logger.info("KPI Analytics API shutting down.")
 
@@ -73,11 +112,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from routers import dashboard, kpi, chatbot, mcp, auth, admin  # noqa
+from routers import dashboard, kpi, mcp, auth, admin  # noqa
 
 app.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 app.include_router(kpi.router,       prefix="/kpi",       tags=["KPI"])
-app.include_router(chatbot.router,   prefix="/chatbot",   tags=["Chatbot"])
 app.include_router(mcp.router,       prefix="/mcp",       tags=["MCP"])
 app.include_router(auth.router,      prefix="/auth",      tags=["Auth"])
 app.include_router(admin.router,     prefix="/admin",     tags=["Admin"])

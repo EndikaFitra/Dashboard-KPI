@@ -10,7 +10,7 @@ export function KPIScoreCard({ score, totalKPI }: KPIScoreCardProps) {
   const cards = [
     {
       label: "KPI Score",
-      value: score.toFixed(1),
+      value: score.toFixed(2),
       icon: TrendingUp,
       accent: "text-primary bg-accent",
     },

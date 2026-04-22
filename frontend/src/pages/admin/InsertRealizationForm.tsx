@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   adminGetDivisions, adminGetKpi, adminGetPeriods, adminGetRealizations,
-  adminPostRealization, adminPutRealization,
+  adminPostRealization, adminPutRealization, adminDeleteRealization,
   DivisionMeta, PeriodMeta, RealizationRecord, RealizationPayload,
 } from "@/api/client";
 import {
   ClipboardList, Save, CheckCircle2, AlertCircle, Loader2,
-  Pencil, X, PlusCircle, TrendingUp, TrendingDown, Minus,
+  Pencil, X, PlusCircle, TrendingUp, TrendingDown, Minus, Trash2,
 } from "lucide-react";
 
 const EMPTY: RealizationPayload = {
@@ -21,6 +21,8 @@ export default function InsertRealizationForm() {
   const [editId, setEditId]       = useState<number | null>(null);
   const [feedback, setFeedback]   = useState<{ ok: boolean; text: string } | null>(null);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  // Delete confirmation dialog
+  const [confirmDelete, setConfirmDelete] = useState<RealizationRecord | null>(null);
 
   // ── Reference data from API ──────────────────────────────────────────── //
   const { data: divisions = [] } = useQuery<DivisionMeta[]>({
@@ -38,9 +40,10 @@ export default function InsertRealizationForm() {
   });
 
   const { data: periods = [] } = useQuery<PeriodMeta[]>({
-    queryKey: ["admin-meta-periods", selectedDiv?.evaluation_period],
-    queryFn: () => adminGetPeriods(selectedDiv?.evaluation_period),
-    enabled: !!selectedDiv,
+    // Selalu gunakan M (Bulanan) — input realisasi wajib per bulan
+    queryKey: ["admin-meta-periods", "M"],
+    queryFn: () => adminGetPeriods("M"),
+    enabled: form.division_id > 0,
   });
 
   // ── Existing data table ──────────────────────────────────────────────── //
@@ -84,9 +87,23 @@ export default function InsertRealizationForm() {
       setFeedback({ ok: false, text: e?.response?.data?.detail || "Gagal memperbarui data" }),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => adminDeleteRealization(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-realizations"] });
+      setFeedback({ ok: true, text: "Data realisasi berhasil dihapus!" });
+      setConfirmDelete(null);
+      // If we were editing the deleted row, cancel edit
+      if (editId === confirmDelete?.fact_id) cancelEdit();
+    },
+    onError: (e: any) =>
+      setFeedback({ ok: false, text: e?.response?.data?.detail || "Gagal menghapus data" }),
+  });
+
   function handleDivisionChange(divId: number) {
     setForm({ ...EMPTY, division_id: divId, year: filterYear });
     setEditId(null);
+    // Reset period selection when division changes
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -126,6 +143,7 @@ export default function InsertRealizationForm() {
     : null;
 
   const isBusy = createMut.isPending || updateMut.isPending;
+  const isDeleting = deleteMut.isPending;
 
   const inputCls = "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition bg-white";
 
@@ -189,12 +207,21 @@ export default function InsertRealizationForm() {
               </select>
             </div>
 
-            {/* KPI */}
+            {/* KPI — pilih KPI, target otomatis terisi dari default_target */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">KPI</label>
               <select
                 value={form.kpi_id}
-                onChange={(e) => setForm({ ...form, kpi_id: +e.target.value })}
+                onChange={(e) => {
+                  const selectedKpiId = +e.target.value;
+                  const selectedKpi = kpis.find((k: any) => k.kpi_id === selectedKpiId);
+                  setForm({
+                    ...form,
+                    kpi_id: selectedKpiId,
+                    // Auto-fill target dari default_target KPI
+                    target: selectedKpi?.default_target ?? form.target,
+                  });
+                }}
                 className={inputCls}
                 required
                 disabled={!!editId || form.division_id === 0}
@@ -220,34 +247,59 @@ export default function InsertRealizationForm() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Period */}
+          <div className="grid grid-cols-1 gap-4">
+            {/* Periode — selalu Bulanan (M) */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
                 Periode
-                {selectedDiv && (
-                  <span className="ml-1.5 text-blue-500 font-normal">
-                    ({selectedDiv.evaluation_period === "M" ? "Bulanan" : selectedDiv.evaluation_period === "Q" ? "Kuartalan" : "Semester"})
-                  </span>
-                )}
+                <span className="ml-1.5 text-blue-500 font-normal text-[11px]">(Bulanan)</span>
               </label>
               <select
                 value={form.period_id}
                 onChange={(e) => setForm({ ...form, period_id: +e.target.value })}
                 className={inputCls}
                 required
-                disabled={!!editId || !selectedDiv}
+                disabled={!!editId || form.division_id === 0}
               >
-                <option value={0}>-- Pilih Periode --</option>
+                <option value={0}>-- Pilih Bulan --</option>
                 {periods.map((p) => (
                   <option key={p.period_id} value={p.period_id}>{p.period_name}</option>
                 ))}
               </select>
             </div>
+          </div>
 
-            {/* Target */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Target — terisi otomatis dari default_target KPI yang dipilih */}
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1.5">Target</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-slate-600">
+                  Target
+                  {form.kpi_id > 0 && (() => {
+                    const kpi = kpis.find((k: any) => k.kpi_id === form.kpi_id);
+                    return kpi?.default_target != null ? (
+                      <span className="ml-1.5 text-slate-400 font-normal text-[11px]">
+                        (default: {kpi.default_target.toLocaleString("id-ID")})
+                      </span>
+                    ) : null;
+                  })()}
+                </label>
+                {/* Tombol reset ke default_target */}
+                {!editId && form.kpi_id > 0 && (() => {
+                  const kpi = kpis.find((k: any) => k.kpi_id === form.kpi_id);
+                  return kpi?.default_target != null && form.target !== kpi.default_target ? (
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({
+                        ...f, target: kpi.default_target,
+                      }))}
+                      className="text-[11px] text-blue-500 hover:text-blue-700 transition"
+                    >
+                      Reset ke default
+                    </button>
+                  ) : null;
+                })()}
+              </div>
               <input
                 type="number" step="0.01" required
                 value={form.target || ""}
@@ -286,7 +338,7 @@ export default function InsertRealizationForm() {
                 achievement >= 100 ? "text-emerald-700" :
                 achievement >= 80  ? "text-amber-700" : "text-red-700"
               }`}>
-                {achievement.toFixed(1)}%
+                {achievement.toFixed(2)}%
               </span>
             </div>
           )}
@@ -353,7 +405,7 @@ export default function InsertRealizationForm() {
                   <th className="px-4 py-3 text-right">Target</th>
                   <th className="px-4 py-3 text-right">Realisasi</th>
                   <th className="px-4 py-3 text-right">Achievement</th>
-                  <th className="px-4 py-3 text-center">Edit</th>
+                  <th className="px-4 py-3 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -375,19 +427,72 @@ export default function InsertRealizationForm() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => startEdit(row)}
-                        className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition"
-                        title="Edit record ini"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => startEdit(row)}
+                          className="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg transition"
+                          title="Edit record ini"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => { setFeedback(null); setConfirmDelete(row); }}
+                          className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition"
+                          title="Hapus record ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* ── Confirm Delete Dialog ─────────────────────────────────── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-800">Hapus Data Realisasi?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Tindakan ini tidak dapat dibatalkan.</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl px-4 py-3 text-sm space-y-1">
+              <p><span className="text-slate-500">KPI:</span> <span className="font-medium">{confirmDelete.kpi_name}</span></p>
+              <p><span className="text-slate-500">Periode:</span> <span className="font-medium">{confirmDelete.period_name} {confirmDelete.year}</span></p>
+              <p><span className="text-slate-500">Target / Realisasi:</span>{" "}
+                <span className="font-medium">{confirmDelete.target.toLocaleString("id-ID")} / {confirmDelete.realization.toLocaleString("id-ID")}</span>
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-sm font-medium border border-slate-200 rounded-xl hover:bg-slate-50 transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => deleteMut.mutate(confirmDelete.fact_id)}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-500 hover:bg-red-600 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isDeleting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Menghapus...</>
+                  : <><Trash2 className="w-4 h-4" /> Hapus</>}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

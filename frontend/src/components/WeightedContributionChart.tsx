@@ -30,7 +30,10 @@ export function WeightedContributionChart({ kpis }: Props) {
               <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+          <Tooltip
+            contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+            formatter={(value: number) => [Number(value).toFixed(2) + "%", "Weight"]}
+          />
           <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
         </PieChart>
       </ResponsiveContainer>

@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import LoginPage from "@/pages/LoginPage";
 import Overview from "@/pages/Overview";
 import DivisionDashboard from "@/pages/DivisionDashboard";
+import ChatPage from "@/pages/ChatPage";
 import NotFound from "@/pages/NotFound";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
@@ -39,6 +40,7 @@ const App = () => (
             }
           >
             <Route path="/" element={<Overview />} />
+            <Route path="/chat" element={<ChatPage />} />
             <Route path="/:divisionId" element={<DivisionDashboard />} />
           </Route>
 

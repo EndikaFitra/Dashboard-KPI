@@ -21,8 +21,9 @@ export function formatTarget(value: number, unit: string): string {
       maximumFractionDigits: 0,
     }).format(value);
   }
-  if (unit === "%") return `${value}%`;
-  return `${value} ${unit}`;
+  const formatted = Number(value).toFixed(2);
+  if (unit === "%") return `${formatted}%`;
+  return `${formatted} ${unit}`;
 }
 
 export function getStatusColor(score: number): "achieved" | "warning" | "danger" {

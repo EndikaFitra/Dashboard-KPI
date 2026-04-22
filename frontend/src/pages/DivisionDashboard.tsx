@@ -4,13 +4,13 @@ import { KPIScoreCard } from "@/components/KPIScoreCard";
 import { TargetVsRealizationChart } from "@/components/TargetVsRealizationChart";
 import { PerformanceTrendChart } from "@/components/PerformanceTrendChart";
 import { WeightedContributionChart } from "@/components/WeightedContributionChart";
-import { KPIUnderTargetTable } from "@/components/KPIUnderTargetTable";
+import { KPIListTable } from "@/components/KPIListTable";
 import { KPIDetailCard } from "@/components/KPIDetailCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
-import { useDivision, useTrend } from "@/hooks/useKpiData";
+import { useDivision, useTrend, useAvailableYears } from "@/hooks/useKpiData";
 import type { KPIIndicator } from "@/data/kpiData";
 import type { KpiItem } from "@/api/client";
 
@@ -44,11 +44,10 @@ const EVAL_LABEL: Record<string, string> = { H: "Half Year", Q: "Quarter", M: "M
 // KPI IDs that should use the detail card view (non-% units)
 const CARD_UNITS = new Set(["unit", "IDR", "customer", "quotation"]);
 
-const YEAR_OPTIONS = ["2024", "2025"];
-
 export default function DivisionDashboard() {
   const { divisionId } = useParams<{ divisionId: string }>();
-  const [year, setYear] = useState(2025);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const { data: years = [new Date().getFullYear()] } = useAvailableYears();
 
   // Division ID is stored as number 1-4; map slug → id
   const SLUG_TO_ID: Record<string, number> = {
@@ -96,6 +95,7 @@ export default function DivisionDashboard() {
   const currentTrend = (trend?.current_trend ?? []).map((t) => ({ period: t.period, score: t.achievement }));
   const prevTrend = (trend?.previous_trend ?? []).map((t) => ({ period: t.period, score: t.achievement }));
   const evalLabel = EVAL_LABEL[division.evaluation_period] ?? division.evaluation_period;
+  const trendChartType = divId === 1 ? "bar" : "line"; // Network → bar chart
 
   // Overall score = avg achievement
   const score = division.avg_achievement;
@@ -103,21 +103,22 @@ export default function DivisionDashboard() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{division.division_name} Division</h1>
-          <div className="flex items-center gap-2 mt-1">
+      {/* Header — wraps to two lines on small screens */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight">{division.division_name} Division</h1>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge variant="secondary" className="text-xs">{evalLabel}</Badge>
             <span className="text-sm text-muted-foreground">Performance Dashboard</span>
           </div>
         </div>
         <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-          <SelectTrigger className="w-32 bg-card">
+          <SelectTrigger className="w-28 bg-card shrink-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {YEAR_OPTIONS.map((y) => (
-              <SelectItem key={y} value={y}>{y}</SelectItem>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -133,18 +134,18 @@ export default function DivisionDashboard() {
             ))}
             {barKpis.length > 0 && <TargetVsRealizationChart kpis={barKpis} />}
           </div>
-          <PerformanceTrendChart data={currentTrend} prevYearData={prevTrend} periodLabel={evalLabel} />
+          <PerformanceTrendChart data={currentTrend} prevYearData={prevTrend} periodLabel={evalLabel} chartType={trendChartType} />
         </>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <TargetVsRealizationChart kpis={legacyKpis} />
-          <PerformanceTrendChart data={currentTrend} prevYearData={prevTrend} periodLabel={evalLabel} />
+          <PerformanceTrendChart data={currentTrend} prevYearData={prevTrend} periodLabel={evalLabel} chartType={trendChartType} />
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <WeightedContributionChart kpis={legacyKpis} />
-        <KPIUnderTargetTable kpis={legacyKpis} />
+        <KPIListTable kpis={legacyKpis} />
       </div>
     </div>
   );

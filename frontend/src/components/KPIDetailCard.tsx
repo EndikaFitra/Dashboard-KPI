@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { TrendingUp, Target } from "lucide-react";
 import type { KPIIndicator } from "@/data/kpiData";
-import { formatTarget, getStatusColor } from "@/data/kpiData";
+import { formatTarget } from "@/data/kpiData";
 
 interface Props {
   kpi: KPIIndicator;
@@ -9,31 +9,13 @@ interface Props {
 }
 
 export function KPIDetailCard({ kpi, title }: Props) {
-  const status = getStatusColor(kpi.score);
-  const pct = ((kpi.realization / kpi.target) * 100).toFixed(1);
-
-  const statusStyles = {
-    achieved: "bg-achieved/10 text-achieved border-achieved/20",
-    warning: "bg-warning/10 text-warning border-warning/20",
-    danger: "bg-danger/10 text-danger border-danger/20",
-  };
-
-  const statusLabel = {
-    achieved: "On Track",
-    warning: "Warning",
-    danger: "Below Target",
-  };
+  const pct = ((kpi.realization / kpi.target) * 100).toFixed(2);
 
   return (
     <Card className="p-5 shadow-sm border-0 shadow-foreground/5">
       <h3 className="text-sm font-semibold mb-4">{title || `Target vs Realization — ${kpi.name}`}</h3>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground font-medium">{kpi.name}</span>
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${statusStyles[status]}`}>
-            {statusLabel[status]}
-          </span>
-        </div>
+        <p className="text-xs text-muted-foreground font-medium">{kpi.name}</p>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-muted/50 rounded-lg p-4 text-center">
@@ -51,21 +33,18 @@ export function KPIDetailCard({ kpi, title }: Props) {
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Achievement</span>
-            <span className="font-semibold">{pct}%</span>
+            <span className={`font-semibold ${Number(pct) >= 100 ? "text-emerald-600" : "text-blue-600"}`}>
+              {pct}%
+            </span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${
-                status === "achieved" ? "bg-achieved" : status === "warning" ? "bg-warning" : "bg-danger"
+                Number(pct) >= 100 ? "bg-emerald-500" : "bg-blue-500"
               }`}
               style={{ width: `${Math.min(Number(pct), 100)}%` }}
             />
           </div>
-        </div>
-
-        <div className="flex justify-between text-xs text-muted-foreground pt-1 border-t border-border">
-          <span>Weight: {kpi.weight}%</span>
-          <span>Score: {kpi.score}</span>
         </div>
       </div>
     </Card>

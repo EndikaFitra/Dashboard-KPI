@@ -13,6 +13,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/years")
+def get_available_years(db: Session = Depends(get_db)):
+    """Return distinct years that have data in fact_kpi_quarterly, sorted descending."""
+    from sqlalchemy import text
+    rows = db.execute(text(
+        "SELECT DISTINCT year FROM fact_kpi_quarterly ORDER BY year DESC"
+    )).fetchall()
+    return [r.year for r in rows]
+
+
 @router.get("/overview")
 def overview(
     year: int = Query(2025, description="Year to query"),

@@ -111,11 +111,34 @@ def create_kpi(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    kpi = DimKpi(**payload.model_dump())
-    db.add(kpi)
-    db.commit()
-    db.refresh(kpi)
-    return kpi
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy import text
+
+    def _do_insert():
+        kpi = DimKpi(**payload.model_dump())
+        db.add(kpi)
+        db.commit()
+        db.refresh(kpi)
+        return kpi
+
+    try:
+        return _do_insert()
+    except IntegrityError:
+        # Sequence out of sync — reset and retry once
+        db.rollback()
+        try:
+            db.execute(text(
+                "SELECT setval('dim_kpi_kpi_id_seq', "
+                "COALESCE((SELECT MAX(kpi_id) FROM dim_kpi), 0) + 1, false)"
+            ))
+            db.commit()
+            return _do_insert()
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=f"Gagal membuat KPI, konflik ID: {exc}"
+            )
 
 
 @router.get("/kpi", response_model=list[KpiResponse])
@@ -190,6 +213,20 @@ def update_realization(
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.delete("/realization/{fact_id}", status_code=204)
+def delete_realization(
+    fact_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Hapus satu record realisasi KPI berdasarkan fact_id."""
+    row = db.query(FactKpiPerformance).filter(FactKpiPerformance.fact_id == fact_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Realization record tidak ditemukan")
+    db.delete(row)
+    db.commit()
 
 
 # ── ETL Trigger ──────────────────────────────────────────────────────────── #
