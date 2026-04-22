@@ -53,9 +53,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GEMINI_API_URL = os.getenv("GEMINI_API_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 MCP_PORT     = int(os.getenv("MCP_PORT", "8001"))
 
 
@@ -126,9 +126,9 @@ TOOL_REGISTRY: dict = {
 
 
 # --------------------------------------------------------------------------- #
-# Tool schemas untuk Groq API
+# Tool schemas untuk Gemini API
 # --------------------------------------------------------------------------- #
-GROQ_TOOLS = [
+GEMINI_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -230,13 +230,13 @@ ATURAN PENTING:
 
 
 # --------------------------------------------------------------------------- #
-# Groq Tool Calling Loop
+# Gemini Tool Calling Loop
 # --------------------------------------------------------------------------- #
 async def run_chat_loop(question: str, year: int) -> str:
     """
-    Kirim pertanyaan ke Groq dengan tool definitions.
-    Jika Groq memanggil tool, eksekusi fungsi Python asli dan feed hasilnya kembali.
-    Ulangi hingga Groq menghasilkan jawaban final (tanpa tool_calls).
+    Kirim pertanyaan ke Gemini dengan tool definitions.
+    Jika Gemini memanggil tool, eksekusi fungsi Python asli dan feed hasilnya kembali.
+    Ulangi hingga Gemini menghasilkan jawaban final (tanpa tool_calls).
     """
     # Prioritaskan tahun yang disebutkan user dalam teks pertanyaan
     year = _extract_year_from_text(question, year)
@@ -248,21 +248,21 @@ async def run_chat_loop(question: str, year: int) -> str:
     ]
 
     headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {GEMINI_API_KEY}",
         "Content-Type": "application/json"
     }
 
     async with httpx.AsyncClient(timeout=120.0) as client:
         for iteration in range(5):
-            logger.info(f"Groq iteration {iteration + 1}, messages={len(messages)}")
+            logger.info(f"Gemini iteration {iteration + 1}, messages={len(messages)}")
 
             resp = await client.post(
-                f"{GROQ_API_URL}/chat/completions",
+                f"{GEMINI_API_URL}/chat/completions",
                 headers=headers,
                 json={
-                    "model":    GROQ_MODEL,
+                    "model":    GEMINI_MODEL,
                     "messages": messages,
-                    "tools":    GROQ_TOOLS,
+                    "tools":    GEMINI_TOOLS,
                     "tool_choice": "auto",
                 },
             )
@@ -360,7 +360,7 @@ def health():
     return {
         "status": "ok",
         "server": "KPI FastMCP Chat Server",
-        "model":  GROQ_MODEL,
+        "model":  GEMINI_MODEL,
         "port":   MCP_PORT,
         "tools":  list(TOOL_REGISTRY.keys()),
     }
@@ -376,7 +376,7 @@ def list_tools():
                 "description": t["function"]["description"],
                 "parameters":  t["function"]["parameters"],
             }
-            for t in GROQ_TOOLS
+            for t in GEMINI_TOOLS
         ]
     }
 
@@ -391,24 +391,24 @@ async def chat(req: ChatRequest):
     logger.info(f"Chat: '{req.message}' year={req.year}")
     try:
         answer = await run_chat_loop(req.message, req.year)
-        return ChatResponse(response=answer, model=GROQ_MODEL)
+        return ChatResponse(response=answer, model=GEMINI_MODEL)
 
     except httpx.ConnectError:
         msg = (
-            f"Tidak dapat terhubung ke Groq API di {GROQ_API_URL}. "
+            f"Tidak dapat terhubung ke Gemini API di {GEMINI_API_URL}. "
             "Pastikan koneksi internet stabil."
         )
         logger.error(msg)
-        return ChatResponse(response=msg, model=GROQ_MODEL)
+        return ChatResponse(response=msg, model=GEMINI_MODEL)
 
     except httpx.HTTPStatusError as exc:
-        msg = f"Groq error {exc.response.status_code}: {exc.response.text[:200]}"
+        msg = f"Gemini error {exc.response.status_code}: {exc.response.text[:200]}"
         logger.error(msg)
-        return ChatResponse(response=msg, model=GROQ_MODEL)
+        return ChatResponse(response=msg, model=GEMINI_MODEL)
 
     except Exception as exc:
         logger.error(f"Chat error: {exc}", exc_info=True)
-        return ChatResponse(response=f"Server error: {str(exc)}", model=GROQ_MODEL)
+        return ChatResponse(response=f"Server error: {str(exc)}", model=GEMINI_MODEL)
 
 
 # --------------------------------------------------------------------------- #
@@ -416,5 +416,5 @@ async def chat(req: ChatRequest):
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     logger.info(f"Starting FastMCP Chat Server on port {MCP_PORT}")
-    logger.info(f"Groq API: {GROQ_API_URL} | Model: {GROQ_MODEL}")
+    logger.info(f"Gemini API: {GEMINI_API_URL} | Model: {GEMINI_MODEL}")
     uvicorn.run(app, host="0.0.0.0", port=MCP_PORT, log_level="info")
