@@ -133,7 +133,7 @@ export default function ChatPage() {
             <div>
               <h1 className="text-xl font-bold tracking-tight">AI Data Analyst</h1>
               <p className="text-xs text-muted-foreground">
-                Powered by Ollama · llama3.1:latest
+                Powered by GroqAI · llama-3.1-8b-instant
               </p>
             </div>
           </div>
