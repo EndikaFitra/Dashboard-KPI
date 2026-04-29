@@ -15,10 +15,10 @@ router = APIRouter()
 
 @router.get("/years")
 def get_available_years(db: Session = Depends(get_db)):
-    """Return distinct years that have data in fact_kpi_quarterly, sorted descending."""
+    """Return distinct years that have data in fact_kpi_performance, sorted descending."""
     from sqlalchemy import text
     rows = db.execute(text(
-        "SELECT DISTINCT year FROM fact_kpi_quarterly ORDER BY year DESC"
+        "SELECT DISTINCT year FROM fact_kpi_performance ORDER BY year DESC"
     )).fetchall()
     return [r.year for r in rows]
 

@@ -5,30 +5,33 @@ from typing import Optional
 
 # ── dim_kpi ──────────────────────────────────────────────────────────────── #
 class KpiCreate(BaseModel):
-    division_id:       int
-    kpi_name:          str
-    unit:              str
+    division_id:        int
+    kpi_name:           str
+    unit:               str
     visualization_type: str = "bar"
-    default_target:    float
-    weight:            float  # 0.0 – 100.0
+    default_target:     float
+    weight:             float  # 0.0 – 100.0
+    evaluation_period:  str = "Q"  # M, Q, H
 
 
 class KpiUpdate(BaseModel):
-    kpi_name:          Optional[str]   = None
-    unit:              Optional[str]   = None
-    visualization_type: Optional[str] = None
-    default_target:    Optional[float] = None
-    weight:            Optional[float] = None
+    kpi_name:           Optional[str]   = None
+    unit:               Optional[str]   = None
+    visualization_type: Optional[str]  = None
+    default_target:     Optional[float] = None
+    weight:             Optional[float] = None
+    evaluation_period:  Optional[str]  = None
 
 
 class KpiResponse(BaseModel):
-    kpi_id:            int
-    division_id:       int
-    kpi_name:          str
-    unit:              str
+    kpi_id:             int
+    division_id:        int
+    kpi_name:           str
+    unit:               str
     visualization_type: str
-    default_target:    float
-    weight:            float
+    default_target:     float
+    weight:             float
+    evaluation_period:  str
 
     model_config = {"from_attributes": True}
 

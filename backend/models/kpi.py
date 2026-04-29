@@ -13,5 +13,6 @@ class DimKpi(Base):
     visualization_type = Column(String(50), default="bar")
     default_target = Column(Float, nullable=False)
     weight = Column(Float, nullable=False, default=0.0)  # % weight e.g. 35.0 for 35%
+    evaluation_period = Column(String(1), nullable=False, default="Q")  # M=Monthly, Q=Quarterly, H=Half Year
 
     division = relationship("DimDivision", backref="kpis")

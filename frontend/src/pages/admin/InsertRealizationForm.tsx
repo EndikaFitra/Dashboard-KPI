@@ -39,11 +39,16 @@ export default function InsertRealizationForm() {
     enabled: form.division_id > 0,
   });
 
+  // Periode dinamis: bergantung pada evaluation_period KPI yang dipilih
+  // Kirim kpi_id ke backend agar backend tahu harus return M/Q/H
+  const selectedKpi = kpis.find((k: any) => k.kpi_id === form.kpi_id) as any | undefined;
+  const evalPeriodLabel: Record<string, string> = { M: "Bulanan", Q: "Kuartalan", H: "Semesteran" };
+  const currentEvalLabel = evalPeriodLabel[selectedKpi?.evaluation_period ?? "Q"] ?? "Kuartalan";
+
   const { data: periods = [] } = useQuery<PeriodMeta[]>({
-    // Selalu gunakan M (Bulanan) — input realisasi wajib per bulan
-    queryKey: ["admin-meta-periods", "M"],
-    queryFn: () => adminGetPeriods("M"),
-    enabled: form.division_id > 0,
+    queryKey: ["admin-meta-periods", form.kpi_id],
+    queryFn: () => adminGetPeriods(undefined, form.kpi_id),
+    enabled: form.kpi_id > 0,
   });
 
   // ── Existing data table ──────────────────────────────────────────────── //
@@ -103,7 +108,16 @@ export default function InsertRealizationForm() {
   function handleDivisionChange(divId: number) {
     setForm({ ...EMPTY, division_id: divId, year: filterYear });
     setEditId(null);
-    // Reset period selection when division changes
+  }
+
+  function handleKpiChange(kpiId: number) {
+    const selectedKpi = kpis.find((k: any) => k.kpi_id === kpiId);
+    setForm({
+      ...form,
+      kpi_id: kpiId,
+      period_id: 0,  // reset periode saat KPI berubah
+      target: selectedKpi?.default_target ?? form.target,
+    });
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -212,16 +226,7 @@ export default function InsertRealizationForm() {
               <label className="block text-xs font-medium text-slate-600 mb-1.5">KPI</label>
               <select
                 value={form.kpi_id}
-                onChange={(e) => {
-                  const selectedKpiId = +e.target.value;
-                  const selectedKpi = kpis.find((k: any) => k.kpi_id === selectedKpiId);
-                  setForm({
-                    ...form,
-                    kpi_id: selectedKpiId,
-                    // Auto-fill target dari default_target KPI
-                    target: selectedKpi?.default_target ?? form.target,
-                  });
-                }}
+                onChange={(e) => handleKpiChange(+e.target.value)}
                 className={inputCls}
                 required
                 disabled={!!editId || form.division_id === 0}
@@ -248,20 +253,22 @@ export default function InsertRealizationForm() {
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {/* Periode — selalu Bulanan (M) */}
+            {/* Periode — dinamis sesuai evaluation_period KPI yang dipilih */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
                 Periode
-                <span className="ml-1.5 text-blue-500 font-normal text-[11px]">(Bulanan)</span>
+                {selectedKpi && (
+                  <span className="ml-1.5 text-blue-500 font-normal text-[11px]">({currentEvalLabel})</span>
+                )}
               </label>
               <select
                 value={form.period_id}
                 onChange={(e) => setForm({ ...form, period_id: +e.target.value })}
                 className={inputCls}
                 required
-                disabled={!!editId || form.division_id === 0}
+                disabled={!!editId || form.kpi_id === 0}
               >
-                <option value={0}>-- Pilih Bulan --</option>
+                <option value={0}>-- Pilih Periode --</option>
                 {periods.map((p) => (
                   <option key={p.period_id} value={p.period_id}>{p.period_name}</option>
                 ))}

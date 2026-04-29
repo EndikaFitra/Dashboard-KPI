@@ -40,28 +40,45 @@ api.interceptors.response.use(
 
 // ── Dashboard ──────────────────────────────────────────────────────────── //
 
-export interface KpiItem {
-  kpi_id: number;
-  kpi_name: string;
-  unit: string;
-  visualization_type: string;
-  weight: number;
-  quarter: string;
-  year: number;
+export interface PeriodDetail {
+  period_id: number;
+  period_name: string;
+  period_order: number;
   target: number;
   realization: number;
   achievement: number;
   status: "green" | "yellow" | "red";
 }
 
+export interface KpiItem {
+  kpi_id: number;
+  kpi_name: string;
+  unit: string;
+  visualization_type: string;
+  weight: number;
+  evaluation_period: string;   // M | Q | H
+  evaluation_label?: string;
+  annual_report: number;       // rata-rata achievement seluruh periode
+  status: "green" | "yellow" | "red";
+  periods: PeriodDetail[];     // breakdown per periode
+  // legacy fields untuk backward compat
+  quarter: string;
+  year: number;
+  target: number;
+  realization: number;
+  achievement: number;
+}
+
 export interface DivisionOverview {
   division_id: number;
   division_name: string;
-  evaluation_period: string;
-  evaluation_label: string;
-  avg_achievement: number;
+  division_report: number;     // Σ(annual × weight)/100
   status: "green" | "yellow" | "red";
   total_kpis: number;
+  on_target: number;
+  on_progress: number;
+  // legacy
+  avg_achievement: number;
   achieved_kpis: number;
   warning_kpis: number;
   danger_kpis: number;
@@ -71,6 +88,9 @@ export interface OverviewData {
   year: number;
   company_avg: number;
   total_kpis: number;
+  on_target: number;
+  on_progress: number;
+  // legacy
   achieved_kpis: number;
   warning_kpis: number;
   danger_kpis: number;
@@ -83,8 +103,12 @@ export interface DivisionDetailData {
   evaluation_period: string;
   evaluation_label: string;
   year: number;
-  avg_achievement: number;
+  division_report: number;     // skor akhir divisi
+  avg_achievement: number;     // alias division_report (legacy)
   status: string;
+  total_kpis: number;
+  on_target: number;
+  on_progress: number;
   kpis: KpiItem[];
 }
 
@@ -108,12 +132,13 @@ export interface UnderperformItem {
   kpi_id: number;
   kpi_name: string;
   unit: string;
-  quarter: string;
+  evaluation_period: string;
   year: number;
-  target: number;
-  realization: number;
+  annual_report: number;
+  status: string;
+  // legacy
+  quarter: string;
   achievement: number;
-  gap: number;
 }
 
 export interface UnderperformData {
@@ -189,6 +214,7 @@ export interface KpiPayload {
   visualization_type: string;
   default_target: number;
   weight: number;
+  evaluation_period: string;  // M | Q | H
 }
 
 export interface RealizationPayload {
@@ -204,6 +230,9 @@ export interface EtlPayload { year: number; all_years: boolean }
 
 export const adminGetKpi = (division_id?: number) =>
   api.get("/admin/kpi", { params: division_id ? { division_id } : {} }).then((r) => r.data);
+
+export const adminGetKpiById = (kpi_id: number) =>
+  api.get(`/admin/kpi/${kpi_id}`).then((r) => r.data);
 
 export const adminPostKpi = (payload: KpiPayload) =>
   api.post("/admin/kpi", payload).then((r) => r.data);
@@ -269,9 +298,12 @@ export interface RealizationRecord {
 export const adminGetDivisions = () =>
   api.get<DivisionMeta[]>("/admin/meta/divisions").then((r) => r.data);
 
-export const adminGetPeriods = (period_type?: string) =>
+export const adminGetPeriods = (period_type?: string, kpi_id?: number) =>
   api.get<PeriodMeta[]>("/admin/meta/periods", {
-    params: period_type ? { period_type } : {},
+    params: {
+      ...(period_type ? { period_type } : {}),
+      ...(kpi_id     ? { kpi_id }      : {}),
+    },
   }).then((r) => r.data);
 
 export const adminGetRealizations = (params: {

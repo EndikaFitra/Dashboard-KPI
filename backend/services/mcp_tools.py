@@ -1,394 +1,257 @@
 """
-MCP Tools — each function queries fact_kpi_quarterly and returns structured data.
-Achievement calculation uses weighted average from dim_kpi.weight.
+MCP Tools — query dan kalkulasi KPI menggunakan model per-indikator.
+
+Semua perhitungan menggunakan calculate_division_report / calculate_kpi_annual
+dari aggregation_service, bukan lagi fact_kpi_quarterly.
 """
 import logging
-from collections import defaultdict
 from typing import Any, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from services.aggregation_service import (
+    calculate_division_report,
+    calculate_kpi_annual,
+    _achievement_status,
+)
+
 logger = logging.getLogger(__name__)
 
-PERIOD_LABEL = {"H": "Half Year", "Q": "Quarter", "M": "Monthly"}
-
-
-def _achievement_status(achievement: float) -> str:
-    if achievement >= 100:
-        return "green"
-    if achievement >= 80:
-        return "yellow"
-    return "red"
-
-
-def _weighted_avg(achievements: list[float], weights: list[float]) -> float:
-    """Compute weighted average. Both lists must be same length."""
-    total_w = sum(weights)
-    if total_w == 0:
-        return 0.0
-    return sum(a * w for a, w in zip(achievements, weights)) / total_w
-
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# TOOL 1: Overview — all divisions, weighted avg per division                 #
+# TOOL 1: Overview — semua divisi, Division Report masing-masing              #
 # ─────────────────────────────────────────────────────────────────────────── #
 def get_overview_kpi(db: Session, year: int) -> Dict[str, Any]:
-    sql = text("""
-        SELECT
-            d.division_id,
-            d.division_name,
-            d.evaluation_period,
-            COUNT(DISTINCT k.kpi_id)                                            AS total_kpis,
-            SUM(kpi_agg.avg_achievement * k.weight) / NULLIF(SUM(k.weight), 0) AS avg_achievement,
-            SUM(CASE WHEN kpi_agg.avg_achievement >= 100 THEN 1 ELSE 0 END)    AS achieved_kpis,
-            SUM(CASE WHEN kpi_agg.avg_achievement >= 80
-                      AND kpi_agg.avg_achievement < 100 THEN 1 ELSE 0 END)     AS warning_kpis,
-            SUM(CASE WHEN kpi_agg.avg_achievement < 80 THEN 1 ELSE 0 END)      AS danger_kpis
-        FROM dim_division d
-        JOIN dim_kpi k ON d.division_id = k.division_id
-        LEFT JOIN (
-            SELECT kpi_id, division_id, AVG(achievement) AS avg_achievement
-            FROM fact_kpi_quarterly
-            WHERE year = :year
-            GROUP BY kpi_id, division_id
-        ) kpi_agg ON k.kpi_id = kpi_agg.kpi_id AND k.division_id = kpi_agg.division_id
-        GROUP BY d.division_id, d.division_name, d.evaluation_period
-        ORDER BY avg_achievement DESC NULLS LAST
-    """)
-    rows = db.execute(sql, {"year": year}).fetchall()
+    """Company-wide KPI overview: Division Report tiap divisi."""
+    div_sql = text("SELECT division_id FROM dim_division ORDER BY division_id")
+    div_rows = db.execute(div_sql).fetchall()
 
     divisions = []
-    for r in rows:
-        avg = round(r.avg_achievement or 0, 2)
-        divisions.append({
-            "division_id":      r.division_id,
-            "division_name":    r.division_name,
-            "evaluation_period": r.evaluation_period,
-            "evaluation_label": PERIOD_LABEL.get(r.evaluation_period, r.evaluation_period),
-            "avg_achievement":  avg,
-            "status":           _achievement_status(avg),
-            "total_kpis":       r.total_kpis or 0,
-            "achieved_kpis":    r.achieved_kpis or 0,
-            "warning_kpis":     r.warning_kpis or 0,
-            "danger_kpis":      r.danger_kpis or 0,
-        })
+    for dr in div_rows:
+        result = calculate_division_report(db, dr.division_id, year)
+        if "error" not in result:
+            divisions.append({
+                "division_id":     result["division_id"],
+                "division_name":   result["division_name"],
+                "division_report": result["division_report"],
+                "status":          result["status"],
+                "total_kpis":      result["total_kpis"],
+                "on_target":       result["on_target"],
+                "on_progress":     result["on_progress"],
+            })
 
-    total_kpis  = sum(d["total_kpis"]   for d in divisions)
-    achieved    = sum(d["achieved_kpis"] for d in divisions)
-    warning     = sum(d["warning_kpis"]  for d in divisions)
-    danger      = sum(d["danger_kpis"]   for d in divisions)
+    # Company average = rata-rata Division Report semua divisi
     company_avg = round(
-        sum(d["avg_achievement"] for d in divisions) / len(divisions), 2
-    ) if divisions else 0
+        sum(d["division_report"] for d in divisions) / len(divisions), 2
+    ) if divisions else 0.0
+
+    total_kpis   = sum(d["total_kpis"]   for d in divisions)
+    on_target    = sum(d["on_target"]    for d in divisions)
+    on_progress  = sum(d["on_progress"]  for d in divisions)
+
+    # Sort by Division Report descending
+    divisions.sort(key=lambda d: d["division_report"], reverse=True)
 
     return {
-        "year": year,
-        "company_avg":   company_avg,
-        "total_kpis":    total_kpis,
-        "achieved_kpis": achieved,
-        "warning_kpis":  warning,
-        "danger_kpis":   danger,
-        "divisions":     divisions,
+        "year":         year,
+        "company_avg":  company_avg,
+        "total_kpis":   total_kpis,
+        "on_target":    on_target,
+        "on_progress":  on_progress,
+        # Legacy field names for frontend compatibility
+        "achieved_kpis": on_target,
+        "warning_kpis":  0,
+        "danger_kpis":   on_progress,
+        "divisions":    divisions,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# TOOL 2: Division detail — per-KPI breakdown with weight                     #
+# TOOL 2: Division detail — per-KPI Annual Report + Division Report           #
 # ─────────────────────────────────────────────────────────────────────────── #
 def get_division_kpi(db: Session, division_id: int, year: int) -> Dict[str, Any]:
-    div_sql = text("SELECT * FROM dim_division WHERE division_id = :did")
-    div = db.execute(div_sql, {"did": division_id}).fetchone()
-    if not div:
-        return {"error": f"Division {division_id} not found"}
+    """Breakdown detail KPI + Annual Report + Division Report satu divisi."""
+    result = calculate_division_report(db, division_id, year)
+    if "error" in result:
+        return result
 
-    sql = text("""
-        SELECT
-            fq.kpi_id,
-            k.kpi_name,
-            k.unit,
-            k.visualization_type,
-            k.weight,
-            fq.quarter,
-            fq.year,
-            fq.target,
-            fq.realization,
-            fq.achievement
-        FROM fact_kpi_quarterly fq
-        JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
-        WHERE fq.division_id = :did AND fq.year = :year
-        ORDER BY k.kpi_id, fq.quarter
-    """)
-    rows = db.execute(sql, {"did": division_id, "year": year}).fetchall()
-
-    # Build KPI list
-    kpis = []
-    for r in rows:
-        kpis.append({
-            "kpi_id":           r.kpi_id,
-            "kpi_name":         r.kpi_name,
-            "unit":             r.unit,
-            "visualization_type": r.visualization_type,
-            "weight":           r.weight,
-            "quarter":          r.quarter,
-            "year":             r.year,
-            "target":           r.target,
-            "realization":      r.realization,
-            "achievement":      round(r.achievement, 2),
-            "status":           _achievement_status(r.achievement),
+    # Buat flat list KPI items untuk frontend
+    kpi_items = []
+    for k in result["kpis"]:
+        # Satu entry per KPI (annual level) + breakdown periodik
+        kpi_items.append({
+            "kpi_id":            k["kpi_id"],
+            "kpi_name":          k["kpi_name"],
+            "unit":              k["unit"],
+            "weight":            k["weight"],
+            "evaluation_period": k["evaluation_period"],
+            "evaluation_label":  k.get("evaluation_label", k["evaluation_period"]),
+            "visualization_type": k["visualization_type"],
+            "annual_report":     k["annual_report"],
+            "status":            k["status"],
+            "periods":           k["periods"],
+            # Legacy fields for frontend compatibility
+            "quarter":       "annual",
+            "year":          year,
+            "target":        k["default_target"],
+            "realization":   round(k["annual_report"] * k["default_target"] / 100, 2) if k["default_target"] else 0,
+            "achievement":   k["annual_report"],
         })
 
-    # Weighted avg: first get per-KPI avg across quarters, then weight
-    kpi_quarters: dict = defaultdict(list)
-    kpi_weight: dict = {}
-    for r in rows:
-        kpi_quarters[r.kpi_id].append(r.achievement)
-        kpi_weight[r.kpi_id] = r.weight
-
-    kpi_avgs   = [sum(v) / len(v) for v in kpi_quarters.values()]
-    kpi_weights = [kpi_weight[k] for k in kpi_quarters.keys()]
-    avg = round(_weighted_avg(kpi_avgs, kpi_weights), 2)
-
     return {
-        "division_id":       div.division_id,
-        "division_name":     div.division_name,
-        "evaluation_period": div.evaluation_period,
-        "evaluation_label":  PERIOD_LABEL.get(div.evaluation_period, div.evaluation_period),
+        "division_id":      result["division_id"],
+        "division_name":    result["division_name"],
+        "evaluation_period": "mixed",   # tiap KPI bisa beda
+        "evaluation_label":  "Per Indikator",
         "year":              year,
-        "avg_achievement":   avg,
-        "status":            _achievement_status(avg),
-        "kpis":              kpis,
+        "avg_achievement":   result["division_report"],  # legacy field
+        "division_report":   result["division_report"],
+        "status":            result["status"],
+        "total_kpis":        result["total_kpis"],
+        "on_target":         result["on_target"],
+        "on_progress":       result["on_progress"],
+        "kpis":              kpi_items,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# TOOL 3: Trend — respects evaluation_period (M/Q/H)                          #
+# TOOL 3: Trend — Division Report per tahun (current vs previous)             #
 # ─────────────────────────────────────────────────────────────────────────── #
 def get_kpi_trend(db: Session, division_id: int, year: int) -> Dict[str, Any]:
-    div_sql = text("""
-        SELECT division_name, evaluation_period
-        FROM dim_division WHERE division_id = :did
-    """)
+    """
+    Tren Division Report year-over-year.
+    Current year: breakdown per-periode tiap KPI digabung jadi trend.
+    Previous year: Division Report satu nilai.
+    """
+    div_sql = text("SELECT division_name FROM dim_division WHERE division_id = :did")
     div = db.execute(div_sql, {"did": division_id}).fetchone()
     if not div:
         return {"error": f"Division {division_id} not found"}
 
-    eval_period = div.evaluation_period  # 'M', 'Q', or 'H'
+    # Ambil semua KPI divisi
+    kpi_sql = text("SELECT kpi_id, evaluation_period FROM dim_kpi WHERE division_id = :did ORDER BY kpi_id")
+    kpis = db.execute(kpi_sql, {"did": division_id}).fetchall()
 
-    # ── Monthly (HR Officer) ────────────────────────────────────────────── #
-    if eval_period == "M":
-        sql = text("""
-            SELECT
-                p.period_name,
-                p.period_order,
-                f.year,
-                CASE WHEN f.target > 0
-                     THEN (f.realization / f.target) * 100
-                     ELSE 0
-                END AS achievement,
-                k.weight
-            FROM fact_kpi_performance f
-            JOIN dim_period p  ON f.period_id  = p.period_id
-            JOIN dim_kpi    k  ON f.kpi_id     = k.kpi_id
-            WHERE f.division_id = :did
-              AND f.year IN (:year, :prev_year)
-              AND p.period_type = 'M'
-            ORDER BY f.year, p.period_order
-        """)
-        rows = db.execute(sql, {
-            "did": division_id, "year": year, "prev_year": year - 1
-        }).fetchall()
+    # Current year: kumpulkan achievement per periode dari semua KPI,
+    # lalu hitung weighted average per titik waktu
+    # Karena tiap KPI bisa punya periode beda, trend yang ditampilkan
+    # adalah Division Report per-periode yang paling dominan.
+    # Untuk simplisitas: ambil per-KPI trend, grouped by period_name.
+    from collections import defaultdict
 
-        groups: dict = defaultdict(list)
-        for r in rows:
-            groups[(r.year, r.period_order, r.period_name)].append(
-                (r.achievement, r.weight)
-            )
+    period_contributions: dict = defaultdict(lambda: {"weighted_sum": 0.0, "weight_sum": 0.0})
 
-        current, previous = [], []
-        for (yr, order, name), vals in sorted(groups.items()):
-            achievements = [v[0] for v in vals]
-            weights      = [v[1] for v in vals]
-            avg = round(_weighted_avg(achievements, weights), 2)
-            point = {"period": name, "achievement": avg, "year": yr}
-            if yr == year:
-                current.append(point)
-            else:
-                previous.append(point)
+    for kpi_row in kpis:
+        kpi_data = calculate_kpi_annual(db, kpi_row.kpi_id, year)
+        if not kpi_data or not kpi_data.get("periods"):
+            continue
+        w = kpi_data["weight"]
+        for p in kpi_data["periods"]:
+            key = (p["period_order"], p["period_name"])
+            period_contributions[key]["weighted_sum"] += p["achievement"] * w
+            period_contributions[key]["weight_sum"] += w
 
-    # ── Half Year (Network) ─────────────────────────────────────────────── #
-    elif eval_period == "H":
-        # Aggregate Q1+Q2 → H1, Q3+Q4 → H2
-        sql = text("""
-            SELECT
-                fq.quarter,
-                fq.year,
-                fq.achievement,
-                k.weight
-            FROM fact_kpi_quarterly fq
-            JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
-            WHERE fq.division_id = :did AND fq.year IN (:year, :prev_year)
-            ORDER BY fq.year, fq.quarter
-        """)
-        rows = db.execute(sql, {
-            "did": division_id, "year": year, "prev_year": year - 1
-        }).fetchall()
+    current_trend = []
+    for (order, name), vals in sorted(period_contributions.items()):
+        avg = round(vals["weighted_sum"] / vals["weight_sum"], 2) if vals["weight_sum"] > 0 else 0.0
+        current_trend.append({"period": name, "achievement": avg, "year": year})
 
-        HALF_MAP = {"Q1": "H1", "Q2": "H1", "Q3": "H2", "Q4": "H2"}
-        HALF_ORDER = {"H1": 1, "H2": 2}
-
-        groups: dict = defaultdict(list)
-        for r in rows:
-            half = HALF_MAP.get(r.quarter, "H1")
-            groups[(r.year, half)].append((r.achievement, r.weight))
-
-        current, previous = [], []
-        for (yr, half), vals in sorted(groups.items(), key=lambda x: (x[0][0], HALF_ORDER.get(x[0][1], 0))):
-            achievements = [v[0] for v in vals]
-            weights      = [v[1] for v in vals]
-            avg = round(_weighted_avg(achievements, weights), 2)
-            point = {"period": half, "achievement": avg, "year": yr}
-            if yr == year:
-                current.append(point)
-            else:
-                previous.append(point)
-
-    # ── Quarterly (Software Engineer, Sales Executive) ──────────────────── #
-    else:
-        sql = text("""
-            SELECT
-                fq.quarter,
-                fq.year,
-                fq.achievement,
-                k.weight
-            FROM fact_kpi_quarterly fq
-            JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
-            WHERE fq.division_id = :did AND fq.year IN (:year, :prev_year)
-            ORDER BY fq.year, fq.quarter
-        """)
-        rows = db.execute(sql, {
-            "did": division_id, "year": year, "prev_year": year - 1
-        }).fetchall()
-
-        groups: dict = defaultdict(list)
-        for r in rows:
-            groups[(r.year, r.quarter)].append((r.achievement, r.weight))
-
-        current, previous = [], []
-        for (yr, quarter), vals in sorted(groups.items()):
-            achievements = [v[0] for v in vals]
-            weights      = [v[1] for v in vals]
-            avg = round(_weighted_avg(achievements, weights), 2)
-            point = {"period": quarter, "achievement": avg, "year": yr}
-            if yr == year:
-                current.append(point)
-            else:
-                previous.append(point)
+    # Previous year: satu nilai Division Report
+    prev_result = calculate_division_report(db, division_id, year - 1)
+    prev_div_report = prev_result.get("division_report", 0.0) if "error" not in prev_result else 0.0
+    previous_trend = [{"period": str(year - 1), "achievement": prev_div_report, "year": year - 1}]
 
     return {
         "division_id":    division_id,
         "division_name":  div.division_name,
         "current_year":   year,
-        "current_trend":  current,
-        "previous_trend": previous,
+        "current_trend":  current_trend,
+        "previous_trend": previous_trend,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# TOOL 4: Underperforming — achievement < 80 (individual KPI, not weighted)   #
+# TOOL 4: Underperforming — Annual Report KPI < 80                            #
 # ─────────────────────────────────────────────────────────────────────────── #
 def get_underperforming_kpi(db: Session, year: int) -> Dict[str, Any]:
-    sql = text("""
-        SELECT
-            d.division_id,
-            d.division_name,
-            fq.kpi_id,
-            k.kpi_name,
-            k.unit,
-            k.weight,
-            fq.quarter,
-            fq.year,
-            fq.target,
-            fq.realization,
-            fq.achievement,
-            (fq.realization - fq.target) AS gap
-        FROM fact_kpi_quarterly fq
-        JOIN dim_division d ON fq.division_id = d.division_id
-        JOIN dim_kpi k ON fq.kpi_id = k.kpi_id
-        WHERE fq.year = :year AND fq.achievement < 80
-        ORDER BY fq.achievement ASC
-    """)
-    rows = db.execute(sql, {"year": year}).fetchall()
+    """KPI dengan Annual Report < 80%."""
+    div_sql = text("SELECT division_id FROM dim_division ORDER BY division_id")
+    div_rows = db.execute(div_sql).fetchall()
+
+    kpi_sql = text("SELECT kpi_id, division_id FROM dim_kpi ORDER BY division_id, kpi_id")
+    kpi_rows = db.execute(kpi_sql).fetchall()
 
     items = []
-    for r in rows:
+    for kpi_row in kpi_rows:
+        kpi_data = calculate_kpi_annual(db, kpi_row.kpi_id, year)
+        if not kpi_data or kpi_data.get("annual_report", 100) >= 80:
+            continue
+
+        # Ambil nama divisi
+        div_name_sql = text("SELECT division_name FROM dim_division WHERE division_id = :did")
+        div_name = db.execute(div_name_sql, {"did": kpi_row.division_id}).fetchone()
+
         items.append({
-            "division_id":   r.division_id,
-            "division_name": r.division_name,
-            "kpi_id":        r.kpi_id,
-            "kpi_name":      r.kpi_name,
-            "unit":          r.unit,
-            "weight":        r.weight,
-            "quarter":       r.quarter,
-            "year":          r.year,
-            "target":        r.target,
-            "realization":   r.realization,
-            "achievement":   round(r.achievement, 2),
-            "gap":           round(r.gap, 2),
+            "division_id":    kpi_row.division_id,
+            "division_name":  div_name.division_name if div_name else "Unknown",
+            "kpi_id":         kpi_data["kpi_id"],
+            "kpi_name":       kpi_data["kpi_name"],
+            "unit":           kpi_data["unit"],
+            "weight":         kpi_data["weight"],
+            "evaluation_period": kpi_data["evaluation_period"],
+            "year":           year,
+            "annual_report":  kpi_data["annual_report"],
+            "status":         kpi_data["status"],
+            # legacy
+            "quarter":        "annual",
+            "achievement":    kpi_data["annual_report"],
         })
+
+    # Sort by annual_report ascending (terburuk di atas)
+    items.sort(key=lambda x: x["annual_report"])
 
     return {"year": year, "count": len(items), "items": items}
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# TOOL 5: Compare divisions — weighted ranking                                 #
+# TOOL 5: Compare divisions — ranking berdasarkan Division Report              #
 # ─────────────────────────────────────────────────────────────────────────── #
 def compare_divisions(db: Session, year: int) -> Dict[str, Any]:
-    sql = text("""
-        SELECT
-            d.division_id,
-            d.division_name,
-            d.evaluation_period,
-            COUNT(DISTINCT k.kpi_id)                                            AS total_kpis,
-            SUM(kpi_agg.avg_achievement * k.weight) / NULLIF(SUM(k.weight), 0) AS avg_achievement,
-            MIN(kpi_agg.avg_achievement)                                        AS min_achievement,
-            MAX(kpi_agg.avg_achievement)                                        AS max_achievement
-        FROM dim_division d
-        JOIN dim_kpi k ON d.division_id = k.division_id
-        LEFT JOIN (
-            SELECT kpi_id, division_id, AVG(achievement) AS avg_achievement
-            FROM fact_kpi_quarterly
-            WHERE year = :year
-            GROUP BY kpi_id, division_id
-        ) kpi_agg ON k.kpi_id = kpi_agg.kpi_id AND k.division_id = kpi_agg.division_id
-        GROUP BY d.division_id, d.division_name, d.evaluation_period
-        ORDER BY avg_achievement DESC NULLS LAST
-    """)
-    rows = db.execute(sql, {"year": year}).fetchall()
+    """Ranking divisi berdasarkan Division Report."""
+    div_sql = text("SELECT division_id FROM dim_division ORDER BY division_id")
+    div_rows = db.execute(div_sql).fetchall()
 
     ranking = []
-    for i, r in enumerate(rows):
-        avg = round(r.avg_achievement or 0, 2)
-        ranking.append({
-            "rank":             i + 1,
-            "division_id":      r.division_id,
-            "division_name":    r.division_name,
-            "evaluation_period":r.evaluation_period,
-            "evaluation_label": PERIOD_LABEL.get(r.evaluation_period, r.evaluation_period),
-            "avg_achievement":  avg,
-            "min_achievement":  round(r.min_achievement or 0, 2),
-            "max_achievement":  round(r.max_achievement or 0, 2),
-            "total_kpis":       r.total_kpis or 0,
-            "status":           _achievement_status(avg),
-        })
+    for i, dr in enumerate(div_rows):
+        result = calculate_division_report(db, dr.division_id, year)
+        if "error" not in result:
+            kpi_annuals = [k["annual_report"] for k in result["kpis"] if k.get("periods")]
+            ranking.append({
+                "rank":            0,  # akan di-set setelah sort
+                "division_id":     result["division_id"],
+                "division_name":   result["division_name"],
+                "division_report": result["division_report"],
+                "avg_achievement": result["division_report"],  # legacy
+                "min_achievement": round(min(kpi_annuals), 2) if kpi_annuals else 0.0,
+                "max_achievement": round(max(kpi_annuals), 2) if kpi_annuals else 0.0,
+                "total_kpis":      result["total_kpis"],
+                "status":          result["status"],
+            })
+
+    ranking.sort(key=lambda x: x["division_report"], reverse=True)
+    for i, r in enumerate(ranking):
+        r["rank"] = i + 1
 
     return {"year": year, "ranking": ranking}
 
 
-# Registry for dispatcher
+# ─────────────────────────────────────────────────────────────────────────── #
+# Registry
+# ─────────────────────────────────────────────────────────────────────────── #
 MCP_TOOLS = {
-    "get_overview_kpi":       get_overview_kpi,
-    "get_division_kpi":       get_division_kpi,
-    "get_kpi_trend":          get_kpi_trend,
-    "get_underperforming_kpi":get_underperforming_kpi,
-    "compare_divisions":      compare_divisions,
+    "get_overview_kpi":        get_overview_kpi,
+    "get_division_kpi":        get_division_kpi,
+    "get_kpi_trend":           get_kpi_trend,
+    "get_underperforming_kpi": get_underperforming_kpi,
+    "compare_divisions":       compare_divisions,
 }

@@ -45,19 +45,30 @@ def get_divisions(
 @router.get("/meta/periods")
 def get_periods(
     period_type: str | None = None,
+    kpi_id: int | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Return dim_period rows, optionally filtered by period_type (M/Q/H)."""
+    """
+    Return dim_period rows.
+    - Jika kpi_id diberikan: otomatis filter sesuai evaluation_period KPI tersebut.
+    - Jika period_type diberikan: filter manual (M/Q/H).
+    """
+    # Jika kpi_id diberikan, baca evaluation_period dari KPI tersebut
+    if kpi_id:
+        kpi = db.query(DimKpi).filter(DimKpi.kpi_id == kpi_id).first()
+        if kpi:
+            period_type = kpi.evaluation_period
+
     q = db.query(DimPeriod)
     if period_type:
         q = q.filter(DimPeriod.period_type == period_type.upper())
-    rows = q.order_by(DimPeriod.period_type, DimPeriod.period_order).all()
+    rows = q.order_by(DimPeriod.period_order).all()
     return [
         {
-            "period_id":   p.period_id,
-            "period_name": p.period_name,
-            "period_type": p.period_type,
+            "period_id":    p.period_id,
+            "period_name":  p.period_name,
+            "period_type":  p.period_type,
             "period_order": p.period_order,
         }
         for p in rows
@@ -139,6 +150,18 @@ def create_kpi(
                 status_code=409,
                 detail=f"Gagal membuat KPI, konflik ID: {exc}"
             )
+
+
+@router.get("/kpi/{kpi_id}", response_model=KpiResponse)
+def get_kpi(
+    kpi_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    kpi = db.query(DimKpi).filter(DimKpi.kpi_id == kpi_id).first()
+    if not kpi:
+        raise HTTPException(status_code=404, detail="KPI tidak ditemukan")
+    return kpi
 
 
 @router.get("/kpi", response_model=list[KpiResponse])

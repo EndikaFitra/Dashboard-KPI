@@ -52,20 +52,20 @@ export default function Overview() {
     );
   }
 
-  const barData = data.divisions.map((d) => ({ name: d.division_name.split(" ")[0], Score: d.avg_achievement }));
+  const barData = data.divisions.map((d) => ({ name: d.division_name.split(" ")[0], Score: d.division_report ?? d.avg_achievement }));
   const donutData = [
-    { name: "On Target", value: data.achieved_kpis },
-    { name: "On Progress", value: data.warning_kpis + data.danger_kpis },
+    { name: "On Target", value: data.on_target ?? data.achieved_kpis },
+    { name: "On Progress", value: data.on_progress ?? (data.warning_kpis + data.danger_kpis) },
   ];
 
   const summaryCards = [
     { label: "Company Average", value: `${data.company_avg.toFixed(2)}%`, icon: TrendingUp, accent: "text-primary bg-accent" },
-    { label: "Total KPIs", value: data.total_kpis, icon: Target, accent: "text-primary bg-accent" },
-    { label: "On Target", value: data.achieved_kpis, icon: CheckCircle2, accent: "text-kpi-achieved bg-kpi-achieved-bg" },
-    { label: "Divisions", value: data.divisions.length, icon: Award, accent: "text-primary bg-accent" },
+    { label: "Total KPIs",      value: data.total_kpis,                   icon: Target,      accent: "text-primary bg-accent" },
+    { label: "On Target",       value: data.on_target ?? data.achieved_kpis,  icon: CheckCircle2, accent: "text-kpi-achieved bg-kpi-achieved-bg" },
+    { label: "Divisions",       value: data.divisions.length,             icon: Award,       accent: "text-primary bg-accent" },
   ];
 
-  const sorted = [...data.divisions].sort((a, b) => b.avg_achievement - a.avg_achievement);
+  const sorted = [...data.divisions].sort((a, b) => (b.division_report ?? b.avg_achievement) - (a.division_report ?? a.avg_achievement));
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -151,9 +151,8 @@ export default function Overview() {
               <TableRow>
                 <TableHead className="text-xs w-10">#</TableHead>
                 <TableHead className="text-xs">Division</TableHead>
-                <TableHead className="text-xs hidden sm:table-cell">Period</TableHead>
-                <TableHead className="text-xs">Avg Achievement</TableHead>
-                <TableHead className="text-xs hidden sm:table-cell">KPIs</TableHead>
+                <TableHead className="text-xs hidden sm:table-cell">KPI On Target</TableHead>
+                <TableHead className="text-xs">Division Report</TableHead>
                 <TableHead className="text-xs">Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -162,9 +161,10 @@ export default function Overview() {
                 <TableRow key={d.division_id}>
                   <TableCell className="font-semibold text-muted-foreground">{i + 1}</TableCell>
                   <TableCell className="font-medium whitespace-nowrap">{d.division_name}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm hidden sm:table-cell">{d.evaluation_label}</TableCell>
-                  <TableCell className="font-bold">{d.avg_achievement.toFixed(2)}%</TableCell>
-                  <TableCell className="hidden sm:table-cell">{d.achieved_kpis}/{d.total_kpis}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm hidden sm:table-cell">
+                    {d.on_target ?? d.achieved_kpis}/{d.total_kpis} KPI
+                  </TableCell>
+                  <TableCell className="font-bold">{(d.division_report ?? d.avg_achievement).toFixed(2)}%</TableCell>
                   <TableCell>
                     <Badge className={`${STATUS_BADGE[d.status] ?? ""} text-[11px]`}>
                       {STATUS_LABEL[d.status] ?? d.status}

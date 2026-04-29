@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminGetKpi, adminPostKpi, adminPutKpi, adminDeleteKpi, KpiPayload } from "@/api/client";
-import { getDivision } from "@/api/client";
 import {
   PlusCircle, Pencil, Trash2, Loader2, CheckCircle2,
   AlertCircle, X, Save,
@@ -15,10 +14,17 @@ const DIVISIONS = [
 ];
 
 const VIZ_TYPES = ["bar", "line", "pie", "gauge"];
+const EVAL_PERIODS = [
+  { value: "Q", label: "Quarterly (per Kuartal)" },
+  { value: "M", label: "Monthly (per Bulan)" },
+  { value: "H", label: "Half Year (per Semester)" },
+];
+const EVAL_PERIOD_LABEL: Record<string, string> = { Q: "Quarterly", M: "Monthly", H: "Half Year" };
 
 const EMPTY: KpiPayload = {
   division_id: 1, kpi_name: "", unit: "",
   visualization_type: "bar", default_target: 100, weight: 0,
+  evaluation_period: "Q",
 };
 
 export default function InsertKpiForm() {
@@ -65,7 +71,8 @@ export default function InsertKpiForm() {
     setEditId(kpi.kpi_id);
     setForm({
       division_id: kpi.division_id, kpi_name: kpi.kpi_name, unit: kpi.unit,
-      visualization_type: kpi.visualization_type, default_target: kpi.default_target, weight: kpi.weight,
+      visualization_type: kpi.visualization_type, default_target: kpi.default_target,
+      weight: kpi.weight, evaluation_period: kpi.evaluation_period ?? "Q",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -121,6 +128,14 @@ export default function InsertKpiForm() {
             <input type="number" step="0.01" required value={form.default_target} onChange={(e) => setForm({ ...form, default_target: +e.target.value })} className="input-field" />
           </div>
 
+          {/* Evaluation Period */}
+          <div>
+            <label className="label-sm">Periode Evaluasi</label>
+            <select value={form.evaluation_period} onChange={(e) => setForm({ ...form, evaluation_period: e.target.value })} className="input-field">
+              {EVAL_PERIODS.map((ep) => <option key={ep.value} value={ep.value}>{ep.label}</option>)}
+            </select>
+          </div>
+
           {/* Weight */}
           <div>
             <label className="label-sm">Bobot (%) <span className="text-slate-400 font-normal">0–100</span></label>
@@ -169,6 +184,7 @@ export default function InsertKpiForm() {
                 <th className="px-4 py-3 text-left">Divisi</th>
                 <th className="px-4 py-3 text-left">KPI</th>
                 <th className="px-4 py-3 text-left">Unit</th>
+                <th className="px-4 py-3 text-center">Periode</th>
                 <th className="px-4 py-3 text-right">Target</th>
                 <th className="px-4 py-3 text-right">Bobot</th>
                 <th className="px-4 py-3 text-center">Viz</th>
@@ -181,6 +197,11 @@ export default function InsertKpiForm() {
                   <td className="px-4 py-3 text-slate-500 text-xs">{DIVISIONS.find((d) => d.id === kpi.division_id)?.name}</td>
                   <td className="px-4 py-3 font-medium text-slate-800">{kpi.kpi_name}</td>
                   <td className="px-4 py-3 text-slate-500">{kpi.unit}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                      {EVAL_PERIOD_LABEL[kpi.evaluation_period] ?? kpi.evaluation_period}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-right text-slate-600">{kpi.default_target}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{kpi.weight}%</td>
                   <td className="px-4 py-3 text-center">

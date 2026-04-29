@@ -1,42 +1,49 @@
 """
-ETL Service — orchestrates the full ETL pipeline.
+ETL Service — DEPRECATED.
+
+Sejak revisi sistem ke perhitungan per-indikator (on-the-fly),
+proses ETL batch Month→Quarter tidak lagi diperlukan.
+
+Dashboard dan MCP Tools sekarang langsung menghitung dari
+fact_kpi_performance menggunakan aggregation_service.calculate_division_report().
+
+Endpoint /admin/run-etl dipertahankan untuk backward compatibility,
+namun tidak melakukan operasi apapun yang berarti.
 """
 import logging
 from sqlalchemy.orm import Session
-from services.aggregation_service import aggregate_monthly_to_quarterly
 
 logger = logging.getLogger(__name__)
 
 
 def run_etl(db: Session, year: int) -> dict:
     """
-    Main ETL orchestrator:
-      1. Read raw data from fact_kpi_performance
-      2. Use dim_period_mapping (via aggregation_service)
-      3. Aggregate Month → Quarter
-      4. Store in fact_kpi_quarterly
+    DEPRECATED — Perhitungan sekarang dilakukan on-the-fly.
+    Tidak ada lagi proses agregasi ke fact_kpi_quarterly.
     """
-    logger.info(f"Starting ETL pipeline for year={year}")
-    try:
-        result = aggregate_monthly_to_quarterly(db, year)
-        logger.info(f"ETL completed: {result}")
-        return {"status": "success", **result}
-    except Exception as e:
-        logger.error(f"ETL failed for year={year}: {e}", exc_info=True)
-        db.rollback()
-        return {"status": "error", "year": year, "error": str(e)}
+    logger.info(f"ETL endpoint called for year={year} — no-op (sistem sudah on-the-fly)")
+    return {
+        "status": "success",
+        "year": year,
+        "message": "ETL tidak diperlukan. Dashboard sudah menghitung langsung dari data realisasi.",
+        "processed": 0,
+        "upserted": 0,
+    }
 
 
 def run_etl_all_years(db: Session) -> list:
-    """Run ETL for all distinct years found in fact_kpi_performance."""
+    """DEPRECATED — no-op."""
     from sqlalchemy import text
     rows = db.execute(text("SELECT DISTINCT year FROM fact_kpi_performance ORDER BY year")).fetchall()
     years = [r.year for r in rows]
-    if not years:
-        logger.warning("No data found in fact_kpi_performance")
-        return []
-
-    results = []
-    for yr in years:
-        results.append(run_etl(db, yr))
-    return results
+    logger.info(f"ETL all years called — no-op for years {years}")
+    return [
+        {
+            "status": "success",
+            "year": yr,
+            "message": "ETL tidak diperlukan. Perhitungan dilakukan on-the-fly.",
+            "processed": 0,
+            "upserted": 0,
+        }
+        for yr in years
+    ]

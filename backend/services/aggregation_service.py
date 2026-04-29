@@ -1,134 +1,177 @@
 """
-Aggregation Service — Month → Quarter aggregation logic.
+Aggregation Service — Perhitungan KPI per-indikator (on-the-fly).
 
-Rules:
-  realization = AVG(monthly realizations within quarter)
-  target      = AVG(monthly targets within quarter)
-  achievement = (realization / target) * 100
+Model kalkulasi baru:
+  1. Setiap KPI memiliki evaluation_period sendiri (M/Q/H)
+  2. Achievement per periode = (realization / target) * 100
+  3. Annual Report KPI      = rata-rata achievement seluruh periode dalam setahun
+  4. Division Report        = Σ (annual_report_i × weight_i) / 100
+
+Tidak membutuhkan ETL batch — semua dihitung langsung dari fact_kpi_performance.
 """
 import logging
-from collections import defaultdict
+from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-# Static month→quarter mapping (fallback if dim_period_mapping is empty)
-MONTH_TO_QUARTER = {
-    1: "Q1", 2: "Q1", 3: "Q1",
-    4: "Q2", 5: "Q2", 6: "Q2",
-    7: "Q3", 8: "Q3", 9: "Q3",
-    10: "Q4", 11: "Q4", 12: "Q4",
-}
-
-MONTH_ORDER_TO_QUARTER_MAP = MONTH_TO_QUARTER  # alias
+PERIOD_LABEL = {"M": "Monthly", "Q": "Quarterly", "H": "Half Year"}
 
 
-def _quarter_from_period_order(period_order: int, period_type: str) -> str | None:
-    """Map period_order to Q1-Q4 string based on type."""
-    if period_type == "M":
-        return MONTH_TO_QUARTER.get(period_order)
-    if period_type == "Q":
-        return f"Q{period_order}"
-    return None
+# ────────────────────────────────────────────────────────────────────────────── #
+# Helper
+# ────────────────────────────────────────────────────────────────────────────── #
+def _achievement_status(value: float) -> str:
+    if value >= 100:
+        return "green"
+    if value >= 80:
+        return "yellow"
+    return "red"
 
 
-def aggregate_monthly_to_quarterly(db: Session, year: int) -> dict:
+# ────────────────────────────────────────────────────────────────────────────── #
+# Core: hitung Annual Report untuk satu KPI
+# ────────────────────────────────────────────────────────────────────────────── #
+def calculate_kpi_annual(db: Session, kpi_id: int, year: int) -> Dict[str, Any]:
     """
-    Read raw monthly fact records for `year`, apply dim_period_mapping,
-    compute AVG target/realization per (division, kpi, quarter), then
-    upsert into fact_kpi_quarterly.
-    Returns a summary dict.
+    Hitung Annual Report satu KPI untuk satu tahun.
+
+    Query fact_kpi_performance JOIN dim_period,
+    filter sesuai evaluation_period KPI tersebut,
+    kembalikan:
+      - periods: list {period_name, period_order, target, realization, achievement}
+      - annual_report: rata-rata achievement seluruh periode
     """
-    # 1. Pull all monthly raw data for the year with period info
-    raw_sql = text("""
+    sql = text("""
         SELECT
-            f.fact_id,
-            f.division_id,
-            f.kpi_id,
+            k.kpi_id,
+            k.kpi_name,
+            k.unit,
+            k.weight,
+            k.evaluation_period,
+            k.visualization_type,
+            k.default_target,
+            p.period_id,
+            p.period_name,
+            p.period_type,
+            p.period_order,
             f.year,
             f.target,
             f.realization,
-            p.period_id,
-            p.period_type,
-            p.period_order,
-            p.period_name
+            CASE WHEN f.target > 0
+                 THEN (f.realization / f.target) * 100
+                 ELSE 0
+            END AS achievement
         FROM fact_kpi_performance f
+        JOIN dim_kpi    k ON f.kpi_id    = k.kpi_id
         JOIN dim_period p ON f.period_id = p.period_id
-        WHERE f.year = :year
-        ORDER BY f.division_id, f.kpi_id, p.period_order
+        WHERE f.kpi_id = :kpi_id
+          AND f.year   = :year
+          AND p.period_type = k.evaluation_period
+        ORDER BY p.period_order
     """)
-    raw_rows = db.execute(raw_sql, {"year": year}).fetchall()
+    rows = db.execute(sql, {"kpi_id": kpi_id, "year": year}).fetchall()
 
-    if not raw_rows:
-        logger.warning(f"No raw data found for year {year}")
-        return {"year": year, "processed": 0, "upserted": 0}
+    if not rows:
+        # KPI belum punya data di tahun ini
+        kpi_sql = text("SELECT kpi_id, kpi_name, unit, weight, evaluation_period, visualization_type, default_target FROM dim_kpi WHERE kpi_id = :kid")
+        kpi_row = db.execute(kpi_sql, {"kid": kpi_id}).fetchone()
+        if not kpi_row:
+            return {}
+        return {
+            "kpi_id":             kpi_row.kpi_id,
+            "kpi_name":           kpi_row.kpi_name,
+            "unit":               kpi_row.unit,
+            "weight":             kpi_row.weight,
+            "evaluation_period":  kpi_row.evaluation_period,
+            "visualization_type": kpi_row.visualization_type,
+            "default_target":     kpi_row.default_target,
+            "year":               year,
+            "annual_report":      0.0,
+            "status":             "red",
+            "periods":            [],
+        }
 
-    # 2. Build quarter groups: key=(division_id, kpi_id, year, quarter)
-    groups: dict = defaultdict(lambda: {"targets": [], "realizations": []})
+    periods = []
+    achievements = []
+    for r in rows:
+        ach = round(r.achievement, 2)
+        achievements.append(ach)
+        periods.append({
+            "period_id":    r.period_id,
+            "period_name":  r.period_name,
+            "period_order": r.period_order,
+            "target":       r.target,
+            "realization":  r.realization,
+            "achievement":  ach,
+            "status":       _achievement_status(ach),
+        })
 
-    for row in raw_rows:
-        quarter = _quarter_from_period_order(row.period_order, row.period_type)
-        if quarter is None:
-            logger.debug(f"Skipping period {row.period_name} (type={row.period_type})")
-            continue
-        key = (row.division_id, row.kpi_id, row.year, quarter)
-        groups[key]["targets"].append(row.target)
-        groups[key]["realizations"].append(row.realization)
+    annual_report = round(sum(achievements) / len(achievements), 2) if achievements else 0.0
 
-    if not groups:
-        logger.warning(f"No monthly data to aggregate for year {year}")
-        return {"year": year, "processed": len(raw_rows), "upserted": 0}
+    return {
+        "kpi_id":             rows[0].kpi_id,
+        "kpi_name":           rows[0].kpi_name,
+        "unit":               rows[0].unit,
+        "weight":             rows[0].weight,
+        "evaluation_period":  rows[0].evaluation_period,
+        "evaluation_label":   PERIOD_LABEL.get(rows[0].evaluation_period, rows[0].evaluation_period),
+        "visualization_type": rows[0].visualization_type,
+        "default_target":     rows[0].default_target,
+        "year":               year,
+        "annual_report":      annual_report,
+        "status":             _achievement_status(annual_report),
+        "periods":            periods,
+    }
 
-    # 3. Upsert into fact_kpi_quarterly
-    upserted = 0
-    for (division_id, kpi_id, yr, quarter), vals in groups.items():
-        targets = vals["targets"]
-        realizations = vals["realizations"]
 
-        avg_target = sum(targets) / len(targets)
-        avg_realization = sum(realizations) / len(realizations)
-        achievement = (avg_realization / avg_target * 100) if avg_target > 0 else 0.0
+# ────────────────────────────────────────────────────────────────────────────── #
+# Core: hitung Division Report untuk satu divisi
+# ────────────────────────────────────────────────────────────────────────────── #
+def calculate_division_report(db: Session, division_id: int, year: int) -> Dict[str, Any]:
+    """
+    Hitung Division Report untuk satu divisi.
 
-        # Check if row already exists
-        check_sql = text("""
-            SELECT id FROM fact_kpi_quarterly
-            WHERE division_id = :did AND kpi_id = :kid
-              AND quarter = :quarter AND year = :year
-        """)
-        existing = db.execute(check_sql, {
-            "did": division_id, "kid": kpi_id,
-            "quarter": quarter, "year": yr
-        }).fetchone()
+    Division Report = Σ (annual_report_i × weight_i) / 100
 
-        if existing:
-            update_sql = text("""
-                UPDATE fact_kpi_quarterly
-                SET target = :target, realization = :realization, achievement = :achievement
-                WHERE id = :id
-            """)
-            db.execute(update_sql, {
-                "target": avg_target,
-                "realization": avg_realization,
-                "achievement": achievement,
-                "id": existing.id,
-            })
-        else:
-            insert_sql = text("""
-                INSERT INTO fact_kpi_quarterly
-                    (division_id, kpi_id, quarter, year, target, realization, achievement)
-                VALUES
-                    (:did, :kid, :quarter, :year, :target, :realization, :achievement)
-            """)
-            db.execute(insert_sql, {
-                "did": division_id, "kid": kpi_id,
-                "quarter": quarter, "year": yr,
-                "target": avg_target,
-                "realization": avg_realization,
-                "achievement": achievement,
-            })
-        upserted += 1
+    Mengembalikan:
+      - division_report: float (%)
+      - kpis: list hasil calculate_kpi_annual per KPI
+      - total_kpis, on_target, on_progress counts
+    """
+    # Ambil semua KPI milik divisi ini
+    div_sql = text("SELECT * FROM dim_division WHERE division_id = :did")
+    div = db.execute(div_sql, {"did": division_id}).fetchone()
+    if not div:
+        return {"error": f"Division {division_id} not found"}
 
-    db.commit()
-    logger.info(f"ETL year={year}: processed={len(raw_rows)} rows, upserted={upserted} quarterly records")
-    return {"year": year, "processed": len(raw_rows), "upserted": upserted}
+    kpi_sql = text("SELECT kpi_id FROM dim_kpi WHERE division_id = :did ORDER BY kpi_id")
+    kpi_rows = db.execute(kpi_sql, {"did": division_id}).fetchall()
+
+    kpis: List[Dict] = []
+    for kpi_row in kpi_rows:
+        result = calculate_kpi_annual(db, kpi_row.kpi_id, year)
+        if result:
+            kpis.append(result)
+
+    # Division Report = Σ(annual_report × weight) / 100
+    division_report = round(
+        sum(k["annual_report"] * k["weight"] for k in kpis) / 100,
+        2
+    )
+
+    on_target   = sum(1 for k in kpis if k["annual_report"] >= 100)
+    on_progress = sum(1 for k in kpis if k["annual_report"] < 100)
+
+    return {
+        "division_id":      div.division_id,
+        "division_name":    div.division_name,
+        "year":             year,
+        "division_report":  division_report,
+        "status":           _achievement_status(division_report),
+        "total_kpis":       len(kpis),
+        "on_target":        on_target,
+        "on_progress":      on_progress,
+        "kpis":             kpis,
+    }
