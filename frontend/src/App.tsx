@@ -8,7 +8,6 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import LoginPage from "@/pages/LoginPage";
-import Overview from "@/pages/Overview";
 import DivisionDashboard from "@/pages/DivisionDashboard";
 import ChatPage from "@/pages/ChatPage";
 import NotFound from "@/pages/NotFound";
@@ -39,7 +38,7 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={<Navigate to="/network" replace />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/:divisionId" element={<DivisionDashboard />} />
           </Route>
