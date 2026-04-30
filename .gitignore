@@ -22,7 +22,8 @@ ENV/
 .env.local
 
 # Environment variables (contains secrets!)
-# backend/.env
+backend/.env
+backend/.env.v2
 
 # Pytest / coverage
 .pytest_cache/
