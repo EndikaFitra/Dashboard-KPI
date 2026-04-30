@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database import get_db
 from models.division import DimDivision
@@ -265,7 +266,8 @@ def create_user(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    if db.query(User).filter(User.username == payload.username).first():
+    payload.username = payload.username.lower()
+    if db.query(User).filter(func.lower(User.username) == payload.username).first():
         raise HTTPException(status_code=400, detail="Username sudah digunakan")
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email sudah digunakan")

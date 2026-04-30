@@ -32,7 +32,11 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       logout();
-      window.location.href = "/login";
+      // Hanya redirect jika tidak sedang berada di halaman login
+      // untuk mencegah refresh saat login gagal
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(err);
   }

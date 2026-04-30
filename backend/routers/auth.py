@@ -3,6 +3,7 @@ Auth router — login, register (admin only), and /me endpoint.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database import get_db
 from models.user import User
@@ -21,7 +22,8 @@ router = APIRouter()
 # ── POST /auth/login ──────────────────────────────────────────────────────── #
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == payload.username).first()
+    normalized_username = payload.username.lower()
+    user = db.query(User).filter(func.lower(User.username) == normalized_username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -48,7 +50,8 @@ def register(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
-    if db.query(User).filter(User.username == payload.username).first():
+    payload.username = payload.username.lower()
+    if db.query(User).filter(func.lower(User.username) == payload.username).first():
         raise HTTPException(status_code=400, detail="Username sudah digunakan")
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email sudah digunakan")
