@@ -159,7 +159,7 @@ export default function InsertRealizationForm() {
   const isBusy = createMut.isPending || updateMut.isPending;
   const isDeleting = deleteMut.isPending;
 
-  const inputCls = "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition bg-white";
+  const inputCls = "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition bg-white";
 
   return (
     <div className="p-8 space-y-6">
@@ -172,9 +172,9 @@ export default function InsertRealizationForm() {
       </div>
 
       {/* Workflow info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 text-blue-800 text-sm">
+      <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-4 text-primary text-sm">
         <p className="font-semibold mb-1">📋 Alur Menambah/Update Data Indikator:</p>
-        <ol className="list-decimal list-inside space-y-1 text-blue-700">
+        <ol className="list-decimal list-inside space-y-1 text-primary">
           <li>Pilih <strong>Divisi</strong> → pilih <strong>KPI</strong> → pilih <strong>Periode</strong></li>
           <li>Masukkan <strong>Target</strong> dan <strong>Realisasi</strong> → klik <strong>Simpan</strong></li>
           <li>Untuk <em>update</em> data yang ada: klik ✏️ di tabel bawah</li>
@@ -185,8 +185,8 @@ export default function InsertRealizationForm() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${editId ? "bg-amber-100" : "bg-indigo-100"}`}>
-              {editId ? <Pencil className="w-5 h-5 text-amber-600" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${editId ? "bg-amber-100" : "bg-primary/10"}`}>
+              {editId ? <Pencil className="w-5 h-5 text-amber-600" /> : <PlusCircle className="w-5 h-5 text-primary" />}
             </div>
             <div>
               <h2 className="font-semibold text-slate-700">
@@ -257,7 +257,7 @@ export default function InsertRealizationForm() {
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
                 Periode
                 {selectedKpi && (
-                  <span className="ml-1.5 text-blue-500 font-normal text-[11px]">({currentEvalLabel})</span>
+                  <span className="ml-1.5 text-primary/80 font-normal text-[11px]">({currentEvalLabel})</span>
                 )}
               </label>
               <select
@@ -298,8 +298,8 @@ export default function InsertRealizationForm() {
                       type="button"
                       onClick={() => setForm((f) => ({
                         ...f, target: kpi.default_target,
-                      }))}
-                      className="text-[11px] text-blue-500 hover:text-blue-700 transition"
+                        }))}
+                      className="text-[11px] text-primary/80 hover:text-primary transition"
                     >
                       Reset ke default
                     </button>
@@ -360,7 +360,7 @@ export default function InsertRealizationForm() {
           <button
             type="submit"
             disabled={isBusy || form.division_id === 0}
-            className={`px-6 py-2.5 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 ${editId ? "bg-amber-600 hover:bg-amber-700" : "bg-indigo-600 hover:bg-indigo-700"
+            className={`px-6 py-2.5 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 shadow-sm ${editId ? "bg-amber-600 hover:bg-amber-700" : "bg-primary hover:bg-primary/90"
               }`}
           >
             {isBusy
@@ -386,7 +386,7 @@ export default function InsertRealizationForm() {
                 type="number"
                 value={filterYear}
                 onChange={(e) => setFilterYear(+e.target.value)}
-                className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
           </div>

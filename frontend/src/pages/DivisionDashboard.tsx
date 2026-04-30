@@ -311,8 +311,18 @@ function KpiSection({
 // ── Main Page ─────────────────────────────────────────────────────────────── //
 export default function DivisionDashboard() {
   const { divisionId } = useParams<{ divisionId: string }>();
-  const [year, setYear] = useState(new Date().getFullYear());
-  const { data: years = [new Date().getFullYear()] } = useAvailableYears();
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const { data: years } = useAvailableYears();
+
+  // Set default year to the latest available year from DB on load
+  useEffect(() => {
+    if (years && years.length > 0 && selectedYear === null) {
+      setSelectedYear(years[0]);
+    }
+  }, [years, selectedYear]);
+
+  const year = selectedYear ?? 2025; // fallback to 2025 while loading
+
 
   const divId = SLUG_TO_ID[divisionId ?? ""] ?? 1;
   const { data: division, isLoading, error } = useDivision(divId, year);
@@ -365,12 +375,12 @@ export default function DivisionDashboard() {
           <h1 className="text-xl font-bold tracking-tight">{division.division_name}</h1>
           <p className="text-xs text-muted-foreground mt-0.5">KPI Dashboard · {year}</p>
         </div>
-        <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+        <Select value={String(year)} onValueChange={(v) => setSelectedYear(Number(v))}>
           <SelectTrigger className="w-28 h-8 text-sm bg-background shrink-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            {(years ?? [year]).map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>

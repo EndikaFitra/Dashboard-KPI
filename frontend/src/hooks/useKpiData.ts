@@ -13,7 +13,6 @@ export function useAvailableYears() {
     queryKey: ["available-years"],
     queryFn: getAvailableYears,
     staleTime: 5 * 60_000, // 5 min — years don't change often
-    placeholderData: [new Date().getFullYear()],
   });
 }
 

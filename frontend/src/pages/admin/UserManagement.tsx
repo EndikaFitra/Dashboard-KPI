@@ -62,7 +62,7 @@ export default function UserManagement() {
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition shadow-sm"
         >
           <UserPlus className="w-4 h-4" />
           Tambah User
@@ -89,29 +89,29 @@ export default function UserManagement() {
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Username</label>
               <input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Email</label>
               <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Password</label>
               <input type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Role</label>
               <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
                 <option value="user">User — Dashboard only</option>
                 <option value="admin">Admin — Full access</option>
               </select>
             </div>
             <div className="col-span-full flex gap-3">
               <button type="submit" disabled={createMut.isPending}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60">
+                className="px-5 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 shadow-sm">
                 {createMut.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</> : "Buat User"}
               </button>
               <button type="button" onClick={() => setShowForm(false)}
@@ -149,7 +149,7 @@ export default function UserManagement() {
                 <tr key={user.user_id} className="hover:bg-slate-50 transition">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white uppercase ${user.role === "admin" ? "bg-blue-600" : "bg-slate-400"}`}>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold uppercase shadow-sm ${user.role === "admin" ? "bg-primary text-primary-foreground" : "bg-slate-400 text-white"}`}>
                         {user.username.charAt(0)}
                       </div>
                       <span className="font-medium text-slate-800">{user.username}</span>
@@ -158,7 +158,7 @@ export default function UserManagement() {
                   <td className="px-4 py-3 text-slate-500">{user.email}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${user.role === "admin"
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-primary/10 text-primary"
                         : "bg-slate-100 text-slate-600"
                       }`}>
                       {user.role === "admin" ? <ShieldAlert className="w-3 h-3" /> : <Shield className="w-3 h-3" />}

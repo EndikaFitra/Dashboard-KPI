@@ -5,9 +5,9 @@ import { getUsername, getRole, isAdmin, logout } from "@/lib/auth";
 import { LogOut, ShieldAlert } from "lucide-react";
 
 export function DashboardLayout() {
-  const navigate  = useNavigate();
-  const username  = getUsername() ?? "User";
-  const role      = getRole() ?? "user";
+  const navigate = useNavigate();
+  const username = getUsername() ?? "User";
+  const role = getRole() ?? "user";
   const adminUser = isAdmin();
 
   function handleLogout() {
@@ -32,7 +32,7 @@ export function DashboardLayout() {
             {adminUser && (
               <button
                 onClick={() => navigate("/admin")}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
                 Admin Panel
@@ -40,7 +40,7 @@ export function DashboardLayout() {
             )}
 
             <div className="flex items-center gap-2 pl-3 border-l border-border">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white uppercase ${adminUser ? "bg-blue-600" : "bg-slate-400"}`}>
+              <div className={`w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground uppercase shadow-sm`}>
                 {username.charAt(0)}
               </div>
               <div className="hidden sm:block">
