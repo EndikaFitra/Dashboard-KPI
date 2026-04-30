@@ -13,7 +13,7 @@ const EMPTY: UserCreatePayload = { username: "", email: "", password: "", role: 
 
 export default function UserManagement() {
   const qc = useQueryClient();
-  const [form, setForm]         = useState<UserCreatePayload>(EMPTY);
+  const [form, setForm] = useState<UserCreatePayload>(EMPTY);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
 
@@ -54,7 +54,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Manajemen User</h1>
@@ -71,9 +71,8 @@ export default function UserManagement() {
 
       {/* Feedback */}
       {feedback && (
-        <div className={`mb-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${
-          feedback.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
-        }`}>
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${feedback.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
+          }`}>
           {feedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
           {feedback.text}
           <button onClick={() => setFeedback(null)} className="ml-auto text-current opacity-50 hover:opacity-100">✕</button>
@@ -158,11 +157,10 @@ export default function UserManagement() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{user.email}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      user.role === "admin"
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${user.role === "admin"
                         ? "bg-blue-100 text-blue-700"
                         : "bg-slate-100 text-slate-600"
-                    }`}>
+                      }`}>
                       {user.role === "admin" ? <ShieldAlert className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
                       {user.role}
                     </span>
@@ -170,11 +168,10 @@ export default function UserManagement() {
                   <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => patchMut.mutate({ id: user.user_id, payload: { is_active: !user.is_active } })}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition ${
-                        user.is_active
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition ${user.is_active
                           ? "text-emerald-600 hover:bg-emerald-50"
                           : "text-slate-400 hover:bg-slate-100"
-                      }`}
+                        }`}
                     >
                       {user.is_active
                         ? <><ToggleRight className="w-4 h-4" /> Aktif</>

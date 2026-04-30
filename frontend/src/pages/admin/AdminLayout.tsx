@@ -1,12 +1,11 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  BarChart3, LayoutDashboard, PlusCircle, ClipboardList,
-  Users, LogOut, ArrowLeft, Settings,
+  BarChart3, PlusCircle, ClipboardList,
+  Users, LogOut, ArrowLeft,
 } from "lucide-react";
 import { logout, getUsername } from "@/lib/auth";
 
 const NAV = [
-  { to: "/admin",             label: "Dashboard",          icon: LayoutDashboard, end: true },
   { to: "/admin/kpi",         label: "Kelola KPI",         icon: PlusCircle },
   { to: "/admin/realization", label: "Input Realisasi",    icon: ClipboardList },
   { to: "/admin/users",       label: "Manajemen User",     icon: Users },

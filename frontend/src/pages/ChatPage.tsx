@@ -122,7 +122,7 @@ export default function ChatPage() {
   }, []);
 
   return (
-    <div className="flex flex-col h-[calc(100svh-3.5rem-2rem)] md:h-[calc(100svh-3.5rem-3rem)] max-w-3xl mx-auto">
+    <div className="flex flex-col h-[calc(100svh-3.5rem-2rem)] md:h-[calc(100svh-3.5rem-3rem)] max-w-5xl mx-auto">
       {/* Page header */}
       <div className="mb-4 shrink-0">
         <div className="flex items-center justify-between">

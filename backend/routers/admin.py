@@ -13,11 +13,9 @@ from models.user import User
 from schemas.admin import (
     KpiCreate, KpiUpdate, KpiResponse,
     RealizationCreate, RealizationUpdate, RealizationResponse,
-    EtlRequest,
 )
 from schemas.auth import UserCreate, UserResponse, UserUpdate
 from services.security import require_admin, hash_password
-from services.etl_service import run_etl, run_etl_all_years
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -250,31 +248,6 @@ def delete_realization(
         raise HTTPException(status_code=404, detail="Realization record tidak ditemukan")
     db.delete(row)
     db.commit()
-
-
-# ── ETL Trigger ──────────────────────────────────────────────────────────── #
-
-@router.post("/run-etl")
-def trigger_etl(
-    payload: EtlRequest,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
-):
-    try:
-        if payload.all_years:
-            results = run_etl_all_years(db)
-            return {"status": "success", "results": results}
-        else:
-            result = run_etl(db, payload.year)
-            if result["status"] != "success":
-                raise HTTPException(status_code=500, detail=result.get("error", "ETL failed"))
-            return result
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"ETL error: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc))
-
 
 # ── User Management ──────────────────────────────────────────────────────── #
 

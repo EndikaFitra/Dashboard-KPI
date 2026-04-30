@@ -54,7 +54,6 @@ export interface KpiItem {
   kpi_id: number;
   kpi_name: string;
   unit: string;
-  visualization_type: string;
   weight: number;
   evaluation_period: string;   // M | Q | H
   evaluation_label?: string;
@@ -211,7 +210,6 @@ export interface KpiPayload {
   division_id: number;
   kpi_name: string;
   unit: string;
-  visualization_type: string;
   default_target: number;
   weight: number;
   evaluation_period: string;  // M | Q | H

@@ -13,7 +13,6 @@ const DIVISIONS = [
   { id: 4, name: "HR Officer" },
 ];
 
-const VIZ_TYPES = ["bar", "line", "pie", "gauge"];
 const EVAL_PERIODS = [
   { value: "Q", label: "Quarterly (per Kuartal)" },
   { value: "M", label: "Monthly (per Bulan)" },
@@ -23,14 +22,14 @@ const EVAL_PERIOD_LABEL: Record<string, string> = { Q: "Quarterly", M: "Monthly"
 
 const EMPTY: KpiPayload = {
   division_id: 1, kpi_name: "", unit: "",
-  visualization_type: "bar", default_target: 100, weight: 0,
+  default_target: 100, weight: 0,
   evaluation_period: "Q",
 };
 
 export default function InsertKpiForm() {
   const qc = useQueryClient();
-  const [form, setForm]         = useState<KpiPayload>(EMPTY);
-  const [editId, setEditId]     = useState<number | null>(null);
+  const [form, setForm] = useState<KpiPayload>(EMPTY);
+  const [editId, setEditId] = useState<number | null>(null);
   const [filterDiv, setFilterDiv] = useState(0);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -71,7 +70,7 @@ export default function InsertKpiForm() {
     setEditId(kpi.kpi_id);
     setForm({
       division_id: kpi.division_id, kpi_name: kpi.kpi_name, unit: kpi.unit,
-      visualization_type: kpi.visualization_type, default_target: kpi.default_target,
+      default_target: kpi.default_target,
       weight: kpi.weight, evaluation_period: kpi.evaluation_period ?? "Q",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -80,7 +79,7 @@ export default function InsertKpiForm() {
   const isBusy = createMut.isPending || updateMut.isPending;
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-800">Kelola KPI</h1>
         <p className="text-slate-500 text-sm mt-1">Tambah, edit, atau hapus indikator KPI</p>
@@ -114,13 +113,6 @@ export default function InsertKpiForm() {
             <input required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="e.g. %, IDR, ticket" className="input-field" />
           </div>
 
-          {/* Viz Type */}
-          <div>
-            <label className="label-sm">Tipe Visualisasi</label>
-            <select value={form.visualization_type} onChange={(e) => setForm({ ...form, visualization_type: e.target.value })} className="input-field">
-              {VIZ_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
 
           {/* Default Target */}
           <div>
@@ -187,7 +179,6 @@ export default function InsertKpiForm() {
                 <th className="px-4 py-3 text-center">Periode</th>
                 <th className="px-4 py-3 text-right">Target</th>
                 <th className="px-4 py-3 text-right">Bobot</th>
-                <th className="px-4 py-3 text-center">Viz</th>
                 <th className="px-4 py-3 text-center">Aksi</th>
               </tr>
             </thead>
@@ -204,9 +195,6 @@ export default function InsertKpiForm() {
                   </td>
                   <td className="px-4 py-3 text-right text-slate-600">{kpi.default_target}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{kpi.weight}%</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="px-2 py-0.5 bg-slate-100 rounded text-xs text-slate-600">{kpi.visualization_type}</span>
-                  </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button onClick={() => startEdit(kpi)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"><Pencil className="w-3.5 h-3.5" /></button>

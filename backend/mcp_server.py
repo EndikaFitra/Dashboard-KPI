@@ -37,11 +37,16 @@ load_dotenv()
 
 from app.database import SessionLocal
 from services.mcp_tools import (
-    get_overview_kpi      as _overview,
-    get_division_kpi      as _division,
-    get_kpi_trend         as _trend,
+    get_overview_kpi        as _overview,
+    get_division_kpi        as _division,
+    get_kpi_trend           as _trend,
     get_underperforming_kpi as _underperform,
-    compare_divisions     as _compare,
+    compare_divisions       as _compare,
+    analyze_kpi_drop        as _drop_analysis,
+    get_kpi_contribution    as _contribution,
+    detect_kpi_anomaly      as _anomaly,
+    explain_kpi_definition  as _explain,
+    validate_query_intent,
 )
 
 # --------------------------------------------------------------------------- #
@@ -70,16 +75,21 @@ def _db_call(fn, *args, **kwargs):
         db.close()
 
 
-def _extract_year_from_text(text: str, fallback: int) -> int:
+def _extract_years_from_text(text: str, fallback: int) -> list:
     """
-    Scan teks untuk angka tahun 4 digit (2020-2099).
-    Jika ditemukan, gunakan tahun yang disebutkan user.
-    Jika tidak ada, kembalikan fallback.
+    Scan teks untuk semua angka tahun 4 digit (2020-2099).
+    Kembalikan list tahun unik sesuai urutan kemunculan.
+    Jika tidak ada, kembalikan [fallback].
     """
     matches = re.findall(r'\b(20[2-9]\d)\b', text)
     if matches:
-        return int(matches[-1])  # gunakan tahun terakhir yang disebutkan
-    return fallback
+        seen = []
+        for m in matches:
+            y = int(m)
+            if y not in seen:
+                seen.append(y)
+        return seen
+    return [fallback]
 
 
 # --------------------------------------------------------------------------- #
@@ -97,7 +107,8 @@ def fn_get_division_kpi(division_id: int, year: int = 2025) -> dict:
 
 
 def fn_get_kpi_trend(division_id: int, year: int = 2025) -> dict:
-    """Tren KPI year-over-year (per kuartal) untuk satu divisi.
+    """Tren Division Report year-over-year untuk satu divisi.
+    Periode breakdown mengikuti evaluasi masing-masing KPI (M/Q/H).
     division_id: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer"""
     return _db_call(_trend, division_id, year)
 
@@ -112,15 +123,48 @@ def fn_compare_divisions(year: int = 2025) -> dict:
     return _db_call(_compare, year)
 
 
+def fn_analyze_kpi_drop(division_id: int = 0, year: int = 2025, compare_year: int = 0) -> dict:
+    """Analisis penyebab kenaikan/penurunan performa antar dua tahun.
+    division_id=0 → analisis seluruh perusahaan.
+    division_id: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer"""
+    did = division_id if division_id else None
+    cy  = compare_year if compare_year else None
+    return _db_call(_drop_analysis, did, year, cy)
+
+
+def fn_get_kpi_contribution(division_id: int, year: int = 2025) -> dict:
+    """Kontribusi nyata tiap KPI terhadap Division Report. Identifikasi KPI pendorong & laggard.
+    division_id: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer"""
+    return _db_call(_contribution, division_id, year)
+
+
+def fn_detect_kpi_anomaly(division_id: int, year: int = 2025) -> dict:
+    """Deteksi periode dengan performa tidak biasa (z-score >= 1.5).
+    division_id: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer"""
+    return _db_call(_anomaly, division_id, year)
+
+
+def fn_explain_kpi_definition(kpi_name: str = "", kpi_id: int = 0) -> dict:
+    """Definisi, konteks bisnis, dan metadata sebuah KPI."""
+    return _db_call(_explain, kpi_name, kpi_id)
+
+
 # --------------------------------------------------------------------------- #
-# TOOL_REGISTRY -- pakai fungsi Python asli (fn_*), bukan FunctionTool wrapper
+# TOOL_REGISTRY
 # --------------------------------------------------------------------------- #
 TOOL_REGISTRY: dict = {
+    # Core data
     "get_overview_kpi":        fn_get_overview_kpi,
     "get_division_kpi":        fn_get_division_kpi,
     "get_kpi_trend":           fn_get_kpi_trend,
     "get_underperforming_kpi": fn_get_underperforming_kpi,
     "compare_divisions":       fn_compare_divisions,
+    # Analytical
+    "analyze_kpi_drop":        fn_analyze_kpi_drop,
+    "get_kpi_contribution":    fn_get_kpi_contribution,
+    "detect_kpi_anomaly":      fn_detect_kpi_anomaly,
+    # Semantic
+    "explain_kpi_definition":  fn_explain_kpi_definition,
 }
 
 
@@ -206,25 +250,120 @@ OLLAMA_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_kpi_drop",
+            "description": "Analisis mengapa performa naik atau turun antar dua tahun. Jika tidak ada divisi tertentu yang disebutkan user, gunakan division_id=0 untuk analisis seluruh perusahaan.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "division_id":  {
+                        "type": "integer",
+                        "description": "ID divisi: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer. Gunakan 0 jika tidak ada divisi spesifik (analisis seluruh perusahaan).",
+                    },
+                    "year":         {"type": "integer", "description": "Tahun yang dievaluasi (tahun lebih baru)"},
+                    "compare_year": {"type": "integer", "description": "Tahun pembanding (default: year-1). Isi 0 untuk default."},
+                },
+                "required": ["year"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_kpi_contribution",
+            "description": "Hitung kontribusi nyata tiap KPI terhadap Division Report. Gunakan untuk mengetahui KPI pendorong utama dan KPI laggard.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "division_id": {"type": "integer", "description": "ID divisi: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer"},
+                    "year":        {"type": "integer", "description": "Tahun data"},
+                },
+                "required": ["division_id", "year"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "detect_kpi_anomaly",
+            "description": "Deteksi periode dengan performa tidak biasa secara statistik (z-score ≥ 1.5). Gunakan jika user bertanya tentang lonjakan atau penurunan mendadak.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "division_id": {"type": "integer", "description": "ID divisi: 1=Network, 2=SoftwareEngineer, 3=SalesExecutive, 4=HROfficer"},
+                    "year":        {"type": "integer", "description": "Tahun data"},
+                },
+                "required": ["division_id", "year"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "explain_kpi_definition",
+            "description": "Kembalikan definisi, konteks bisnis, bobot, dan metadata KPI. Gunakan jika user bertanya 'apa itu KPI X' atau 'jelaskan indikator Y'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kpi_name": {"type": "string", "description": "Nama KPI (e.g. 'SLA Compliance', 'Bug Rate'). Isi salah satu: kpi_name ATAU kpi_id."},
+                    "kpi_id":   {"type": "integer", "description": "ID KPI dari database. Isi 0 jika tidak diketahui."},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """/no_think
 Kamu adalah analis KPI perusahaan. Kamu memiliki akses ke tools untuk mengambil data KPI real-time dari database.
 
-Divisi perusahaan:
-- Network (ID=1): evaluasi Half Year, bobot KPI: SLA 60%, Incident Prevention 35%, Inovasi 5%
-- Software Engineer (ID=2): evaluasi Quarter, bobot: Inovasi/Optimasi 30%, Productivity 25%, Bug Rate 25%, Kolaborasi 20%
-- Sales Executive (ID=3): evaluasi Quarter, bobot: MRR 60%, Customer Baru 30%, Quotation 10%
-- HR Officer (ID=4): evaluasi Monthly, semua KPI bobot 20% masing-masing
+## Divisi perusahaan:
+- Network (ID=1): evaluasi Half Year (H), KPI: SLA Compliance 60%, Incident Prevention 35%, Delivery Inovasi 5%
+- Software Engineer (ID=2): evaluasi Quarterly (Q), KPI: Inovasi/Optimasi 30%, Productivity 25%, Bug Rate 25%, Kolaborasi 20%
+- Sales Executive (ID=3): evaluasi Quarterly (Q), KPI: MRR 60%, Customer Baru 30%, Quotation 10%
+- HR Officer (ID=4): evaluasi Monthly (M), semua KPI bobot 20% masing-masing
 
-ATURAN PENTING:
+## Model evaluasi (PENTING — pahami ini):
+- **Annual Report** per KPI = rata-rata achievement semua periode dalam satu tahun
+- **Division Report** = Σ(Annual Report × Bobot) untuk semua KPI dalam divisi
+- Setiap KPI dievaluasi dengan periode yang berbeda (M/Q/H) sesuai jenis indikatornya
+- Tidak ada ETL — semua nilai dihitung langsung (on-the-fly) dari data realisasi
+
+## Status KPI:
+- **On Target**: Annual Report >= 100%
+- **Near Target**: 80% <= Annual Report < 100%
+- **Below Target**: Annual Report < 80%
+
+## Field data penting:
+- `division_report`: skor gabungan divisi (weighted average annual report)
+- `annual_report`: rata-rata achievement KPI sepanjang tahun
+- `on_target`: jumlah KPI dengan status On Target
+- `near_target`: jumlah KPI dengan status Near Target (mendekati target)
+- `below_target`: jumlah KPI dengan status Below Target
+
+## Aturan menjawab:
 - SELALU panggil tool terlebih dahulu sebelum menjawab
-- Jika user menyebutkan tahun tertentu (misal 2026, 2024), GUNAKAN tahun tersebut sebagai parameter `year` saat memanggil tool. JANGAN gunakan tahun lain.
+- Jika user menyebutkan SATU tahun: gunakan tahun tersebut sebagai parameter `year`
+- Jika user menyebutkan BEBERAPA tahun (misal "2025 dan 2024"): WAJIB panggil tool TERPISAH untuk SETIAP tahun, lalu bandingkan hasilnya dalam satu jawaban
 - Jika user tidak menyebutkan tahun, gunakan tahun yang tercantum di konteks pesan (tahun: XXXX)
 - Gunakan Bahasa Indonesia yang ringkas dan profesional
-- Achievement >=100% = On Progress
 - Format angka dengan jelas (persentase, IDR, unit, dll)
 - Fokus pada insight yang actionable
+
+## Panduan pemilihan tool:
+| Intent user | Tool yang dipakai |
+|---|---|
+| "Ringkasan/overview perusahaan" | `get_overview_kpi` |
+| "Detail KPI divisi X" | `get_division_kpi` |
+| "Ranking divisi" | `compare_divisions` |
+| "KPI bermasalah / di bawah target" | `get_underperforming_kpi` |
+| "Tren / perkembangan dari waktu ke waktu" | `get_kpi_trend` |
+| "Kenapa naik/turun? / Apa penyebabnya?" | `analyze_kpi_drop` |
+| "KPI mana yang paling berpengaruh?" | `get_kpi_contribution` |
+| "Ada anomali / lonjakan / penurunan mendadak?" | `detect_kpi_anomaly` |
+| "Apa itu KPI X? / Jelaskan indikator Y" | `explain_kpi_definition` |
 """
 
 
@@ -234,16 +373,36 @@ ATURAN PENTING:
 async def run_chat_loop(question: str, year: int) -> str:
     """
     Kirim pertanyaan ke Ollama dengan tool definitions.
-    Jika Ollama memanggil tool, eksekusi fungsi Python asli dan feed hasilnya kembali.
-    Ulangi hingga Ollama menghasilkan jawaban final (tanpa tool_calls).
+    Guardrail → multi-year detection → Ollama tool-calling loop.
     """
-    # Prioritaskan tahun yang disebutkan user dalam teks pertanyaan
-    year = _extract_year_from_text(question, year)
-    logger.info(f"Effective year for this chat: {year}")
+    # ── Guardrail pre-check ──────────────────────────────────────────────── #
+    safety = validate_query_intent(question)
+    if not safety["valid"]:
+        logger.warning(f"Query refused: {safety['reason']}")
+        return f"Maaf, permintaan tidak dapat diproses. {safety['reason']}"
+
+    # Ekstrak SEMUA tahun yang disebutkan user
+    years_found = _extract_years_from_text(question, year)
+
+    if len(years_found) > 1:
+        # Multi-year: instruksikan AI untuk memanggil tool per tahun
+        year_list = " dan ".join(str(y) for y in years_found)
+        user_content = (
+            f"{question}\n\n"
+            f"[INSTRUKSI SISTEM: User meminta data untuk {len(years_found)} tahun berbeda: {year_list}. "
+            f"WAJIB panggil tool TERPISAH untuk setiap tahun ({', '.join(str(y) for y in years_found)}), "
+            f"kemudian bandingkan hasilnya dalam satu jawaban.]"
+        )
+        effective_year = years_found[0]  # default untuk tool yang tidak dapat year
+    else:
+        effective_year = years_found[0]
+        user_content = f"{question} (gunakan data tahun: {effective_year})"
+
+    logger.info(f"Years detected: {years_found} | Effective default year: {effective_year}")
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": f"{question} (gunakan data tahun: {year})"},
+        {"role": "user",   "content": user_content},
     ]
 
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -297,7 +456,7 @@ async def run_chat_loop(question: str, year: int) -> str:
 
                 # Isi year default jika tidak ada
                 if "year" not in fn_args:
-                    fn_args["year"] = year
+                    fn_args["year"] = effective_year
 
                 logger.info(f"  Tool call: {fn_name}({fn_args})")
 

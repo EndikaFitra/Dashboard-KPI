@@ -16,6 +16,8 @@ dist-ssr/
 
 # ── Local env files ───────────────────────────────────────── #
 *.local
+backend/.env
+backend/.env.v2
 .env
 .env.local
 .env.development.local

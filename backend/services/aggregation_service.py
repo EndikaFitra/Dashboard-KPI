@@ -50,7 +50,6 @@ def calculate_kpi_annual(db: Session, kpi_id: int, year: int) -> Dict[str, Any]:
             k.unit,
             k.weight,
             k.evaluation_period,
-            k.visualization_type,
             k.default_target,
             p.period_id,
             p.period_name,
@@ -75,7 +74,7 @@ def calculate_kpi_annual(db: Session, kpi_id: int, year: int) -> Dict[str, Any]:
 
     if not rows:
         # KPI belum punya data di tahun ini
-        kpi_sql = text("SELECT kpi_id, kpi_name, unit, weight, evaluation_period, visualization_type, default_target FROM dim_kpi WHERE kpi_id = :kid")
+        kpi_sql = text("SELECT kpi_id, kpi_name, unit, weight, evaluation_period, default_target FROM dim_kpi WHERE kpi_id = :kid")
         kpi_row = db.execute(kpi_sql, {"kid": kpi_id}).fetchone()
         if not kpi_row:
             return {}
@@ -85,7 +84,6 @@ def calculate_kpi_annual(db: Session, kpi_id: int, year: int) -> Dict[str, Any]:
             "unit":               kpi_row.unit,
             "weight":             kpi_row.weight,
             "evaluation_period":  kpi_row.evaluation_period,
-            "visualization_type": kpi_row.visualization_type,
             "default_target":     kpi_row.default_target,
             "year":               year,
             "annual_report":      0.0,
@@ -117,7 +115,6 @@ def calculate_kpi_annual(db: Session, kpi_id: int, year: int) -> Dict[str, Any]:
         "weight":             rows[0].weight,
         "evaluation_period":  rows[0].evaluation_period,
         "evaluation_label":   PERIOD_LABEL.get(rows[0].evaluation_period, rows[0].evaluation_period),
-        "visualization_type": rows[0].visualization_type,
         "default_target":     rows[0].default_target,
         "year":               year,
         "annual_report":      annual_report,

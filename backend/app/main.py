@@ -56,7 +56,6 @@ def _reset_sequences():
         ("dim_division",         "dim_division_division_id_seq",     "division_id"),
         ("dim_period",           "dim_period_period_id_seq",         "period_id"),
         ("fact_kpi_performance", "fact_kpi_performance_fact_id_seq", "fact_id"),
-        ("fact_kpi_quarterly",   "fact_kpi_quarterly_id_seq",        "id"),
         ("users",                "users_id_seq",                     "id"),
     ]
     db = SessionLocal()
@@ -87,7 +86,6 @@ async def lifespan(app: FastAPI):
     import models.period         # noqa
     import models.mapping        # noqa
     import models.fact_raw       # noqa
-    import models.fact_quarterly # noqa
     import models.user           # noqa  ← NEW
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ensured.")

@@ -17,9 +17,9 @@ const EMPTY: RealizationPayload = {
 
 export default function InsertRealizationForm() {
   const qc = useQueryClient();
-  const [form, setForm]           = useState<RealizationPayload>(EMPTY);
-  const [editId, setEditId]       = useState<number | null>(null);
-  const [feedback, setFeedback]   = useState<{ ok: boolean; text: string } | null>(null);
+  const [form, setForm] = useState<RealizationPayload>(EMPTY);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   // Delete confirmation dialog
   const [confirmDelete, setConfirmDelete] = useState<RealizationRecord | null>(null);
@@ -162,7 +162,7 @@ export default function InsertRealizationForm() {
   const inputCls = "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition bg-white";
 
   return (
-    <div className="p-8 max-w-6xl space-y-6">
+    <div className="p-8 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Input & Update Realisasi KPI</h1>
@@ -178,7 +178,6 @@ export default function InsertRealizationForm() {
           <li>Pilih <strong>Divisi</strong> → pilih <strong>KPI</strong> → pilih <strong>Periode</strong></li>
           <li>Masukkan <strong>Target</strong> dan <strong>Realisasi</strong> → klik <strong>Simpan</strong></li>
           <li>Untuk <em>update</em> data yang ada: klik ✏️ di tabel bawah</li>
-          <li>Setelah selesai input: buka <strong>Admin Dashboard</strong> → <strong>Run ETL</strong></li>
         </ol>
       </div>
 
@@ -331,20 +330,18 @@ export default function InsertRealizationForm() {
 
           {/* Achievement Preview */}
           {achievement !== null && (
-            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${
-              achievement >= 100 ? "bg-emerald-50 border-emerald-200" :
-              achievement >= 80  ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"
-            }`}>
+            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${achievement >= 100 ? "bg-emerald-50 border-emerald-200" :
+              achievement >= 80 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"
+              }`}>
               <span className="text-xs text-slate-500 flex items-center gap-1.5">
                 {achievement >= 100 ? <TrendingUp className="w-4 h-4 text-emerald-500" /> :
-                 achievement >= 80  ? <Minus className="w-4 h-4 text-amber-500" /> :
-                 <TrendingDown className="w-4 h-4 text-red-500" />}
+                  achievement >= 80 ? <Minus className="w-4 h-4 text-amber-500" /> :
+                    <TrendingDown className="w-4 h-4 text-red-500" />}
                 Preview Achievement
               </span>
-              <span className={`font-bold text-sm ${
-                achievement >= 100 ? "text-emerald-700" :
-                achievement >= 80  ? "text-amber-700" : "text-red-700"
-              }`}>
+              <span className={`font-bold text-sm ${achievement >= 100 ? "text-emerald-700" :
+                achievement >= 80 ? "text-amber-700" : "text-red-700"
+                }`}>
                 {achievement.toFixed(2)}%
               </span>
             </div>
@@ -352,10 +349,9 @@ export default function InsertRealizationForm() {
 
           {/* Feedback */}
           {feedback && (
-            <div className={`px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${
-              feedback.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-red-50 text-red-700 border border-red-200"
-            }`}>
+            <div className={`px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${feedback.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : "bg-red-50 text-red-700 border border-red-200"
+              }`}>
               {feedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
               {feedback.text}
             </div>
@@ -364,9 +360,8 @@ export default function InsertRealizationForm() {
           <button
             type="submit"
             disabled={isBusy || form.division_id === 0}
-            className={`px-6 py-2.5 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 ${
-              editId ? "bg-amber-600 hover:bg-amber-700" : "bg-indigo-600 hover:bg-indigo-700"
-            }`}
+            className={`px-6 py-2.5 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 ${editId ? "bg-amber-600 hover:bg-amber-700" : "bg-indigo-600 hover:bg-indigo-700"
+              }`}
           >
             {isBusy
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
@@ -426,10 +421,9 @@ export default function InsertRealizationForm() {
                     <td className="px-4 py-3 text-right text-slate-600">{row.target.toLocaleString("id-ID")}</td>
                     <td className="px-4 py-3 text-right text-slate-600">{row.realization.toLocaleString("id-ID")}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-semibold ${
-                        row.achievement >= 100 ? "text-emerald-600" :
-                        row.achievement >= 80  ? "text-amber-600" : "text-red-500"
-                      }`}>
+                      <span className={`font-semibold ${row.achievement >= 100 ? "text-emerald-600" :
+                        row.achievement >= 80 ? "text-amber-600" : "text-red-500"
+                        }`}>
                         {row.achievement}%
                       </span>
                     </td>

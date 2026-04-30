@@ -13,7 +13,6 @@ import ChatPage from "@/pages/ChatPage";
 import NotFound from "@/pages/NotFound";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
 import InsertKpiForm from "@/pages/admin/InsertKpiForm";
 import InsertRealizationForm from "@/pages/admin/InsertRealizationForm";
 import UserManagement from "@/pages/admin/UserManagement";
@@ -51,7 +50,7 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<Navigate to="/admin/kpi" replace />} />
             <Route path="/admin/kpi" element={<InsertKpiForm />} />
             <Route path="/admin/realization" element={<InsertRealizationForm />} />
             <Route path="/admin/users" element={<UserManagement />} />
