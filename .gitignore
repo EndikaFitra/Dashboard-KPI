@@ -2,6 +2,10 @@
 # Root .gitignore — KPI Analytics Project
 # ============================================================
 
+.vscode/*
+.vscode/settings.json
+.vscode/extensions.json
+
 # ── Python / Backend ──────────────────────────────────────── #
 __pycache__/
 *.py[cod]
@@ -23,6 +27,7 @@ ENV/
 
 # Environment variables (contains secrets!)
 backend/.env
+.env.v2
 
 # Pytest / coverage
 .pytest_cache/
@@ -117,3 +122,4 @@ temp/
 *.bak
 *.swp
 .antigravity/
+.vscode/settings.json
