@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.database import get_db
 from models.division import DimDivision
@@ -13,11 +14,9 @@ from models.user import User
 from schemas.admin import (
     KpiCreate, KpiUpdate, KpiResponse,
     RealizationCreate, RealizationUpdate, RealizationResponse,
-    EtlRequest,
 )
 from schemas.auth import UserCreate, UserResponse, UserUpdate
-from services.security import require_admin, hash_password
-from services.etl_service import run_etl, run_etl_all_years
+from services.security import require_admin, hash_password, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,19 +44,30 @@ def get_divisions(
 @router.get("/meta/periods")
 def get_periods(
     period_type: str | None = None,
+    kpi_id: int | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Return dim_period rows, optionally filtered by period_type (M/Q/H)."""
+    """
+    Return dim_period rows.
+    - Jika kpi_id diberikan: otomatis filter sesuai evaluation_period KPI tersebut.
+    - Jika period_type diberikan: filter manual (M/Q/H).
+    """
+    # Jika kpi_id diberikan, baca evaluation_period dari KPI tersebut
+    if kpi_id:
+        kpi = db.query(DimKpi).filter(DimKpi.kpi_id == kpi_id).first()
+        if kpi:
+            period_type = kpi.evaluation_period
+
     q = db.query(DimPeriod)
     if period_type:
         q = q.filter(DimPeriod.period_type == period_type.upper())
-    rows = q.order_by(DimPeriod.period_type, DimPeriod.period_order).all()
+    rows = q.order_by(DimPeriod.period_order).all()
     return [
         {
-            "period_id":   p.period_id,
-            "period_name": p.period_name,
-            "period_type": p.period_type,
+            "period_id":    p.period_id,
+            "period_name":  p.period_name,
+            "period_type":  p.period_type,
             "period_order": p.period_order,
         }
         for p in rows
@@ -141,11 +151,23 @@ def create_kpi(
             )
 
 
+@router.get("/kpi/{kpi_id}", response_model=KpiResponse)
+def get_kpi(
+    kpi_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    kpi = db.query(DimKpi).filter(DimKpi.kpi_id == kpi_id).first()
+    if not kpi:
+        raise HTTPException(status_code=404, detail="KPI tidak ditemukan")
+    return kpi
+
+
 @router.get("/kpi", response_model=list[KpiResponse])
 def list_kpi(
     division_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(DimKpi)
     if division_id:
@@ -228,31 +250,6 @@ def delete_realization(
     db.delete(row)
     db.commit()
 
-
-# ── ETL Trigger ──────────────────────────────────────────────────────────── #
-
-@router.post("/run-etl")
-def trigger_etl(
-    payload: EtlRequest,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
-):
-    try:
-        if payload.all_years:
-            results = run_etl_all_years(db)
-            return {"status": "success", "results": results}
-        else:
-            result = run_etl(db, payload.year)
-            if result["status"] != "success":
-                raise HTTPException(status_code=500, detail=result.get("error", "ETL failed"))
-            return result
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"ETL error: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
 # ── User Management ──────────────────────────────────────────────────────── #
 
 @router.get("/users", response_model=list[UserResponse])
@@ -269,7 +266,8 @@ def create_user(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    if db.query(User).filter(User.username == payload.username).first():
+    payload.username = payload.username.lower()
+    if db.query(User).filter(func.lower(User.username) == payload.username).first():
         raise HTTPException(status_code=400, detail="Username sudah digunakan")
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email sudah digunakan")

@@ -2,9 +2,10 @@
 # Root .gitignore — KPI Analytics Project
 # ============================================================
 
+# Visual Studio Code settings (keep workspace settings, ignore local)
 .vscode/*
-.vscode/settings.json
-.vscode/extensions.json
+!.vscode/extensions.json
+!.vscode/settings.json
 
 # ── Python / Backend ──────────────────────────────────────── #
 __pycache__/
@@ -27,7 +28,7 @@ ENV/
 
 # Environment variables (contains secrets!)
 backend/.env
-.env.v2
+backend/.env.v2
 
 # Pytest / coverage
 .pytest_cache/

@@ -1,12 +1,11 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  BarChart3, LayoutDashboard, PlusCircle, ClipboardList,
-  Users, LogOut, ArrowLeft, Settings,
+  BarChart3, PlusCircle, ClipboardList,
+  Users, LogOut, ArrowLeft,
 } from "lucide-react";
 import { logout, getUsername } from "@/lib/auth";
 
 const NAV = [
-  { to: "/admin",             label: "Dashboard",          icon: LayoutDashboard, end: true },
   { to: "/admin/kpi",         label: "Kelola KPI",         icon: PlusCircle },
   { to: "/admin/realization", label: "Input Realisasi",    icon: ClipboardList },
   { to: "/admin/users",       label: "Manajemen User",     icon: Users },
@@ -24,16 +23,16 @@ export default function AdminLayout() {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* ─── Sidebar ─────────────────────────────────────────────────── */}
-      <aside className="w-60 flex flex-col bg-slate-900 text-white shrink-0">
+      <aside className="w-60 flex flex-col bg-sidebar text-sidebar-foreground shrink-0 border-r border-sidebar-border">
         {/* Brand */}
-        <div className="px-5 py-5 border-b border-white/10">
+        <div className="px-5 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-              <BarChart3 className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+              <BarChart3 className="w-4 h-4 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-sm font-bold leading-tight">KPI Analytics</p>
-              <p className="text-[10px] text-blue-300/70 uppercase tracking-widest">Admin Panel</p>
+              <p className="text-sm font-bold leading-tight text-sidebar-foreground">KPI Analytics</p>
+              <p className="text-[10px] text-sidebar-muted uppercase tracking-widest">Admin Panel</p>
             </div>
           </div>
         </div>
@@ -48,8 +47,8 @@ export default function AdminLayout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
                   isActive
-                    ? "bg-blue-600 text-white font-medium"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white"
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 }`
               }
             >
@@ -60,28 +59,28 @@ export default function AdminLayout() {
         </nav>
 
         {/* Footer */}
-        <div className="px-3 pb-5 space-y-0.5 border-t border-white/10 pt-4">
+        <div className="px-3 pb-5 space-y-0.5 border-t border-sidebar-border pt-4">
           <button
             onClick={() => navigate("/")}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-white/10 hover:text-white transition w-full"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition w-full"
           >
             <ArrowLeft className="w-4 h-4" />
             Kembali ke Dashboard
           </button>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition w-full"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-red-400 hover:bg-red-500/10 hover:text-red-400 transition w-full"
           >
             <LogOut className="w-4 h-4" />
             Logout
           </button>
-          <div className="px-3 pt-3 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+          <div className="px-3 pt-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground uppercase shadow-sm">
               {username.charAt(0)}
             </div>
             <div>
-              <p className="text-xs font-medium text-white">{username}</p>
-              <p className="text-[10px] text-slate-400">Administrator</p>
+              <p className="text-xs font-medium text-sidebar-foreground">{username}</p>
+              <p className="text-[10px] text-sidebar-muted">Administrator</p>
             </div>
           </div>
         </div>

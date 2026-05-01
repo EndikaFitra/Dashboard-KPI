@@ -17,9 +17,9 @@ const EMPTY: RealizationPayload = {
 
 export default function InsertRealizationForm() {
   const qc = useQueryClient();
-  const [form, setForm]           = useState<RealizationPayload>(EMPTY);
-  const [editId, setEditId]       = useState<number | null>(null);
-  const [feedback, setFeedback]   = useState<{ ok: boolean; text: string } | null>(null);
+  const [form, setForm] = useState<RealizationPayload>(EMPTY);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   // Delete confirmation dialog
   const [confirmDelete, setConfirmDelete] = useState<RealizationRecord | null>(null);
@@ -39,11 +39,16 @@ export default function InsertRealizationForm() {
     enabled: form.division_id > 0,
   });
 
+  // Periode dinamis: bergantung pada evaluation_period KPI yang dipilih
+  // Kirim kpi_id ke backend agar backend tahu harus return M/Q/H
+  const selectedKpi = kpis.find((k: any) => k.kpi_id === form.kpi_id) as any | undefined;
+  const evalPeriodLabel: Record<string, string> = { M: "Bulanan", Q: "Kuartalan", H: "Semesteran" };
+  const currentEvalLabel = evalPeriodLabel[selectedKpi?.evaluation_period ?? "Q"] ?? "Kuartalan";
+
   const { data: periods = [] } = useQuery<PeriodMeta[]>({
-    // Selalu gunakan M (Bulanan) — input realisasi wajib per bulan
-    queryKey: ["admin-meta-periods", "M"],
-    queryFn: () => adminGetPeriods("M"),
-    enabled: form.division_id > 0,
+    queryKey: ["admin-meta-periods", form.kpi_id],
+    queryFn: () => adminGetPeriods(undefined, form.kpi_id),
+    enabled: form.kpi_id > 0,
   });
 
   // ── Existing data table ──────────────────────────────────────────────── //
@@ -103,7 +108,16 @@ export default function InsertRealizationForm() {
   function handleDivisionChange(divId: number) {
     setForm({ ...EMPTY, division_id: divId, year: filterYear });
     setEditId(null);
-    // Reset period selection when division changes
+  }
+
+  function handleKpiChange(kpiId: number) {
+    const selectedKpi = kpis.find((k: any) => k.kpi_id === kpiId);
+    setForm({
+      ...form,
+      kpi_id: kpiId,
+      period_id: 0,  // reset periode saat KPI berubah
+      target: selectedKpi?.default_target ?? form.target,
+    });
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -145,10 +159,10 @@ export default function InsertRealizationForm() {
   const isBusy = createMut.isPending || updateMut.isPending;
   const isDeleting = deleteMut.isPending;
 
-  const inputCls = "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition bg-white";
+  const inputCls = "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition bg-white";
 
   return (
-    <div className="p-8 max-w-6xl space-y-6">
+    <div className="p-8 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Input & Update Realisasi KPI</h1>
@@ -158,13 +172,12 @@ export default function InsertRealizationForm() {
       </div>
 
       {/* Workflow info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 text-blue-800 text-sm">
+      <div className="bg-primary/5 border border-primary/20 rounded-xl px-5 py-4 text-primary text-sm">
         <p className="font-semibold mb-1">📋 Alur Menambah/Update Data Indikator:</p>
-        <ol className="list-decimal list-inside space-y-1 text-blue-700">
+        <ol className="list-decimal list-inside space-y-1 text-primary">
           <li>Pilih <strong>Divisi</strong> → pilih <strong>KPI</strong> → pilih <strong>Periode</strong></li>
           <li>Masukkan <strong>Target</strong> dan <strong>Realisasi</strong> → klik <strong>Simpan</strong></li>
           <li>Untuk <em>update</em> data yang ada: klik ✏️ di tabel bawah</li>
-          <li>Setelah selesai input: buka <strong>Admin Dashboard</strong> → <strong>Run ETL</strong></li>
         </ol>
       </div>
 
@@ -172,8 +185,8 @@ export default function InsertRealizationForm() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${editId ? "bg-amber-100" : "bg-indigo-100"}`}>
-              {editId ? <Pencil className="w-5 h-5 text-amber-600" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${editId ? "bg-amber-100" : "bg-primary/10"}`}>
+              {editId ? <Pencil className="w-5 h-5 text-amber-600" /> : <PlusCircle className="w-5 h-5 text-primary" />}
             </div>
             <div>
               <h2 className="font-semibold text-slate-700">
@@ -212,16 +225,7 @@ export default function InsertRealizationForm() {
               <label className="block text-xs font-medium text-slate-600 mb-1.5">KPI</label>
               <select
                 value={form.kpi_id}
-                onChange={(e) => {
-                  const selectedKpiId = +e.target.value;
-                  const selectedKpi = kpis.find((k: any) => k.kpi_id === selectedKpiId);
-                  setForm({
-                    ...form,
-                    kpi_id: selectedKpiId,
-                    // Auto-fill target dari default_target KPI
-                    target: selectedKpi?.default_target ?? form.target,
-                  });
-                }}
+                onChange={(e) => handleKpiChange(+e.target.value)}
                 className={inputCls}
                 required
                 disabled={!!editId || form.division_id === 0}
@@ -248,20 +252,22 @@ export default function InsertRealizationForm() {
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {/* Periode — selalu Bulanan (M) */}
+            {/* Periode — dinamis sesuai evaluation_period KPI yang dipilih */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">
                 Periode
-                <span className="ml-1.5 text-blue-500 font-normal text-[11px]">(Bulanan)</span>
+                {selectedKpi && (
+                  <span className="ml-1.5 text-primary/80 font-normal text-[11px]">({currentEvalLabel})</span>
+                )}
               </label>
               <select
                 value={form.period_id}
                 onChange={(e) => setForm({ ...form, period_id: +e.target.value })}
                 className={inputCls}
                 required
-                disabled={!!editId || form.division_id === 0}
+                disabled={!!editId || form.kpi_id === 0}
               >
-                <option value={0}>-- Pilih Bulan --</option>
+                <option value={0}>-- Pilih Periode --</option>
                 {periods.map((p) => (
                   <option key={p.period_id} value={p.period_id}>{p.period_name}</option>
                 ))}
@@ -292,8 +298,8 @@ export default function InsertRealizationForm() {
                       type="button"
                       onClick={() => setForm((f) => ({
                         ...f, target: kpi.default_target,
-                      }))}
-                      className="text-[11px] text-blue-500 hover:text-blue-700 transition"
+                        }))}
+                      className="text-[11px] text-primary/80 hover:text-primary transition"
                     >
                       Reset ke default
                     </button>
@@ -324,20 +330,18 @@ export default function InsertRealizationForm() {
 
           {/* Achievement Preview */}
           {achievement !== null && (
-            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${
-              achievement >= 100 ? "bg-emerald-50 border-emerald-200" :
-              achievement >= 80  ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"
-            }`}>
+            <div className={`flex items-center justify-between px-4 py-3 rounded-lg border ${achievement >= 100 ? "bg-emerald-50 border-emerald-200" :
+              achievement >= 80 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"
+              }`}>
               <span className="text-xs text-slate-500 flex items-center gap-1.5">
                 {achievement >= 100 ? <TrendingUp className="w-4 h-4 text-emerald-500" /> :
-                 achievement >= 80  ? <Minus className="w-4 h-4 text-amber-500" /> :
-                 <TrendingDown className="w-4 h-4 text-red-500" />}
+                  achievement >= 80 ? <Minus className="w-4 h-4 text-amber-500" /> :
+                    <TrendingDown className="w-4 h-4 text-red-500" />}
                 Preview Achievement
               </span>
-              <span className={`font-bold text-sm ${
-                achievement >= 100 ? "text-emerald-700" :
-                achievement >= 80  ? "text-amber-700" : "text-red-700"
-              }`}>
+              <span className={`font-bold text-sm ${achievement >= 100 ? "text-emerald-700" :
+                achievement >= 80 ? "text-amber-700" : "text-red-700"
+                }`}>
                 {achievement.toFixed(2)}%
               </span>
             </div>
@@ -345,10 +349,9 @@ export default function InsertRealizationForm() {
 
           {/* Feedback */}
           {feedback && (
-            <div className={`px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${
-              feedback.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-red-50 text-red-700 border border-red-200"
-            }`}>
+            <div className={`px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${feedback.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : "bg-red-50 text-red-700 border border-red-200"
+              }`}>
               {feedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
               {feedback.text}
             </div>
@@ -357,9 +360,8 @@ export default function InsertRealizationForm() {
           <button
             type="submit"
             disabled={isBusy || form.division_id === 0}
-            className={`px-6 py-2.5 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 ${
-              editId ? "bg-amber-600 hover:bg-amber-700" : "bg-indigo-600 hover:bg-indigo-700"
-            }`}
+            className={`px-6 py-2.5 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 disabled:opacity-60 shadow-sm ${editId ? "bg-amber-600 hover:bg-amber-700" : "bg-primary hover:bg-primary/90"
+              }`}
           >
             {isBusy
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
@@ -384,7 +386,7 @@ export default function InsertRealizationForm() {
                 type="number"
                 value={filterYear}
                 onChange={(e) => setFilterYear(+e.target.value)}
-                className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="w-24 px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
           </div>
@@ -419,10 +421,9 @@ export default function InsertRealizationForm() {
                     <td className="px-4 py-3 text-right text-slate-600">{row.target.toLocaleString("id-ID")}</td>
                     <td className="px-4 py-3 text-right text-slate-600">{row.realization.toLocaleString("id-ID")}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-semibold ${
-                        row.achievement >= 100 ? "text-emerald-600" :
-                        row.achievement >= 80  ? "text-amber-600" : "text-red-500"
-                      }`}>
+                      <span className={`font-semibold ${row.achievement >= 100 ? "text-emerald-600" :
+                        row.achievement >= 80 ? "text-amber-600" : "text-red-500"
+                        }`}>
                         {row.achievement}%
                       </span>
                     </td>

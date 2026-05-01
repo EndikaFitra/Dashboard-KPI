@@ -8,13 +8,11 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 import LoginPage from "@/pages/LoginPage";
-import Overview from "@/pages/Overview";
 import DivisionDashboard from "@/pages/DivisionDashboard";
 import ChatPage from "@/pages/ChatPage";
 import NotFound from "@/pages/NotFound";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
-import AdminDashboard from "@/pages/admin/AdminDashboard";
 import InsertKpiForm from "@/pages/admin/InsertKpiForm";
 import InsertRealizationForm from "@/pages/admin/InsertRealizationForm";
 import UserManagement from "@/pages/admin/UserManagement";
@@ -39,7 +37,7 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={<Navigate to="/network" replace />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/:divisionId" element={<DivisionDashboard />} />
           </Route>
@@ -52,7 +50,7 @@ const App = () => (
               </ProtectedRoute>
             }
           >
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<Navigate to="/admin/kpi" replace />} />
             <Route path="/admin/kpi" element={<InsertKpiForm />} />
             <Route path="/admin/realization" element={<InsertRealizationForm />} />
             <Route path="/admin/users" element={<UserManagement />} />
