@@ -16,7 +16,7 @@ from schemas.admin import (
     RealizationCreate, RealizationUpdate, RealizationResponse,
 )
 from schemas.auth import UserCreate, UserResponse, UserUpdate
-from services.security import require_admin, hash_password
+from services.security import require_admin, hash_password, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -167,7 +167,7 @@ def get_kpi(
 def list_kpi(
     division_id: int | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(get_current_user),
 ):
     q = db.query(DimKpi)
     if division_id:
