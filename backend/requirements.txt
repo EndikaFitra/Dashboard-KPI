@@ -10,3 +10,4 @@ alembic
 fastmcp
 python-jose[cryptography]
 bcrypt
+pandas
