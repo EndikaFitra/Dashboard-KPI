@@ -1,6 +1,6 @@
 import {
   Wifi, Code, TrendingUp, Users, MessageSquare,
-  BarChart2, ChevronDown, ChevronRight, Hash,
+  BarChart2, ChevronDown, ChevronRight, Hash, LineChart as LineChartIcon,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -163,6 +163,14 @@ export function AppSidebar() {
                   <NavLink to="/chat" className="transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
                     <MessageSquare className="w-4 h-4 shrink-0" />
                     {!collapsed && <span>AI Analyst</span>}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.pathname === "/forecast"}>
+                  <NavLink to="/forecast" className="transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                    <LineChartIcon className="w-4 h-4 shrink-0" />
+                    {!collapsed && <span>Statistic Analyst</span>}
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>

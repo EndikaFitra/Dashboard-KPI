@@ -110,13 +110,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from routers import dashboard, kpi, mcp, auth, admin  # noqa
+from routers import dashboard, kpi, mcp, auth, admin, forecast  # noqa
 
 app.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 app.include_router(kpi.router,       prefix="/kpi",       tags=["KPI"])
 app.include_router(mcp.router,       prefix="/mcp",       tags=["MCP"])
 app.include_router(auth.router,      prefix="/auth",      tags=["Auth"])
 app.include_router(admin.router,     prefix="/admin",     tags=["Admin"])
+app.include_router(forecast.router,  prefix="/forecast",  tags=["Forecast"])
 
 
 @app.get("/", tags=["Health"])

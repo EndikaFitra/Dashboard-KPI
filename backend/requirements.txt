@@ -11,3 +11,6 @@ fastmcp
 python-jose[cryptography]
 bcrypt
 pandas
+statsmodels
+numpy
+scikit-learn

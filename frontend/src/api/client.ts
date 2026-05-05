@@ -313,3 +313,26 @@ export const adminGetRealizations = (params: {
   kpi_id?: number;
   year?: number;
 }) => api.get<RealizationRecord[]>("/admin/meta/realizations", { params }).then((r) => r.data);
+
+// ── Forecast ──────────────────────────────────────────────────────────── //
+
+export interface ForecastPoint {
+  label: string;       // e.g. "2026-Q2"
+  value: number | null;
+}
+
+export interface MrrForecastData {
+  kpi_name: string;
+  arima_order: number[];
+  data_points: number;
+  mape: number;
+  aic: number;
+  actual: ForecastPoint[];
+  fitted: ForecastPoint[];
+  forecast: ForecastPoint[];
+}
+
+export const getMrrForecast = (p = 2, d = 0, q = 3, n_forecast = 4) =>
+  api.get<MrrForecastData>("/forecast/mrr", {
+    params: { p, d, q, n_forecast }
+  }).then((r) => r.data);

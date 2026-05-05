@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import LoginPage from "@/pages/LoginPage";
 import DivisionDashboard from "@/pages/DivisionDashboard";
 import ChatPage from "@/pages/ChatPage";
+import ForecastPage from "@/pages/ForecastPage";
 import NotFound from "@/pages/NotFound";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
@@ -39,6 +40,7 @@ const App = () => (
           >
             <Route path="/" element={<Navigate to="/network" replace />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/forecast" element={<ForecastPage />} />
             <Route path="/:divisionId" element={<DivisionDashboard />} />
           </Route>
 
