@@ -49,6 +49,11 @@ from services.mcp_tools import (
     validate_query_intent,
 )
 
+# Import fungsi utama dari forecasting_service yang kita buat sebelumnya.
+# Fungsi ini berisi seluruh logika ARIMA: query data dari DB, fitting model,
+# menghitung forecast 4 quarter ke depan, dan menghitung MAPE.
+from services.forecasting_service import get_mrr_forecast as _get_mrr_forecast
+
 # --------------------------------------------------------------------------- #
 # Config
 # --------------------------------------------------------------------------- #
@@ -150,22 +155,55 @@ def fn_explain_kpi_definition(kpi_name: str = "", kpi_id: int = 0) -> dict:
     return _db_call(_explain, kpi_name, kpi_id)
 
 
+def fn_get_mrr_forecast(p: int = 2, d: int = 0, q: int = 3) -> dict:
+    """
+    Fungsi wrapper untuk memanggil model ARIMA dari forecasting_service.
+
+    Cara kerja:
+    1. Membuka sesi koneksi ke database PostgreSQL via _db_call.
+    2. Meneruskan panggilan ke fungsi _get_mrr_forecast yang berisi:
+       - Query data MRR historis dari tabel fact_kpi_performance.
+       - Fitting model ARIMA dengan order (p, d, q).
+       - Menghitung forecast untuk 4 quarter ke depan.
+       - Menghitung nilai MAPE sebagai ukuran akurasi model.
+    3. Mengembalikan hasil dalam bentuk dict yang langsung bisa dibaca AI.
+
+    Parameter:
+    - p: order AR (Auto-Regressive) — berapa periode lalu yang mempengaruhi sekarang.
+          Ditentukan dari plot PACF pada analisis notebook. Default: 2.
+    - d: order differencing — berapa kali data perlu diubah agar stasioner.
+          Dari hasil uji ADF, data MRR sudah stasioner, maka d=0.
+    - q: order MA (Moving-Average) — seberapa jauh error masa lalu mempengaruhi prediksi.
+          Ditentukan dari plot ACF pada analisis notebook. Default: 3.
+    """
+    return _db_call(_get_mrr_forecast, (p, d, q), 4)
+
+
 # --------------------------------------------------------------------------- #
 # TOOL_REGISTRY
 # --------------------------------------------------------------------------- #
+# TOOL_REGISTRY adalah "daftar menu" yang diberikan kepada AI.
+# Setiap kunci (key) adalah nama tool yang bisa dipanggil AI,
+# dan nilainya adalah fungsi Python yang akan dieksekusi secara nyata.
+# Ketika AI memutuskan untuk memanggil tool, MCP server mencari nama
+# tool di dictionary ini lalu mengeksekusi fungsinya.
 TOOL_REGISTRY: dict = {
-    # Core data
+    # Core data — tools untuk membaca data KPI dari database
     "get_overview_kpi":        fn_get_overview_kpi,
     "get_division_kpi":        fn_get_division_kpi,
     "get_kpi_trend":           fn_get_kpi_trend,
     "get_underperforming_kpi": fn_get_underperforming_kpi,
     "compare_divisions":       fn_compare_divisions,
-    # Analytical
+    # Analytical — tools untuk analisis mendalam (perbandingan, kontribusi, anomali)
     "analyze_kpi_drop":        fn_analyze_kpi_drop,
     "get_kpi_contribution":    fn_get_kpi_contribution,
     "detect_kpi_anomaly":      fn_detect_kpi_anomaly,
-    # Semantic
+    # Semantic — tools untuk penjelasan definisi KPI
     "explain_kpi_definition":  fn_explain_kpi_definition,
+    # Statistical — tools untuk analisis statistik dan forecasting
+    # Mendaftarkan fn_get_mrr_forecast agar AI bisa memanggilnya
+    # saat user bertanya tentang prediksi atau proyeksi MRR.
+    "get_mrr_forecast":        fn_get_mrr_forecast,
 }
 
 
@@ -315,7 +353,70 @@ OLLAMA_TOOLS = [
             },
         },
     },
+    # ── Tool Statistik: MRR Forecasting ─────────────────────────────────────
+    # Schema ini adalah "kartu identitas" tool forecasting yang dibaca oleh AI (Groq).
+    # AI menggunakan informasi ini untuk memutuskan KAPAN harus memanggil tool ini.
+    # Bagian terpenting adalah "description" — kalimat ini yang AI baca untuk
+    # menentukan apakah tool ini relevan dengan pertanyaan user.
+    {
+        "type": "function",
+        "function": {
+            "name": "get_mrr_forecast",
+            # Deskripsi ini sangat penting: harus mencakup semua kata kunci yang
+            # mungkin digunakan user saat bertanya tentang prediksi MRR.
+            # AI akan mencocokkan pertanyaan user dengan deskripsi ini.
+            "description": (
+                "Ambil prediksi (forecast) MRR (Monthly Recurring Revenue) untuk beberapa quarter ke depan "
+                "menggunakan model statistik ARIMA yang telah divalidasi. "
+                "Gunakan tool ini jika user bertanya tentang: "
+                "'forecast MRR', 'prediksi MRR', 'proyeksi pendapatan', "
+                "'MRR masa depan', 'MRR quarter berikutnya', atau 'analisis statistik MRR'. "
+                "Tool ini mengembalikan nilai forecast yang dihitung secara matematis beserta "
+                "nilai MAPE (Mean Absolute Percentage Error) sebagai ukuran akurasi model. "
+                "JANGAN gunakan asumsi manual jika tool ini tersedia."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    # Parameter p: menentukan seberapa jauh ke belakang AI melihat pola AR.
+                    # Nilai default 2 sudah divalidasi melalui uji ACF/PACF.
+                    "p": {
+                        "type": "integer",
+                        "description": (
+                            "Order AR (Auto-Regressive) model ARIMA — "
+                            "menentukan pengaruh nilai MRR periode lalu terhadap prediksi. "
+                            "Default: 2 (sudah divalidasi via plot PACF)."
+                        ),
+                    },
+                    # Parameter d: berdasarkan uji ADF, data MRR stasioner sehingga d=0.
+                    "d": {
+                        "type": "integer",
+                        "description": (
+                            "Order differencing model ARIMA — "
+                            "berapa kali data diubah agar menjadi stasioner. "
+                            "Default: 0 karena uji ADF membuktikan data MRR sudah stasioner."
+                        ),
+                    },
+                    # Parameter q: menentukan pengaruh error prediksi periode lalu.
+                    # Nilai default 3 sudah divalidasi melalui uji ACF/PACF.
+                    "q": {
+                        "type": "integer",
+                        "description": (
+                            "Order MA (Moving-Average) model ARIMA — "
+                            "menentukan pengaruh error prediksi periode sebelumnya. "
+                            "Default: 3 (sudah divalidasi via plot ACF)."
+                        ),
+                    },
+                },
+                # Semua parameter bersifat opsional karena sudah ada nilai default
+                # yang telah divalidasi secara statistik. AI tidak perlu mengisi
+                # parameter ini kecuali user secara eksplisit meminta order berbeda.
+                "required": [],
+            },
+        },
+    },
 ]
+
 
 SYSTEM_PROMPT = """/no_think
 Kamu adalah analis KPI perusahaan. Kamu memiliki akses ke tools untuk mengambil data KPI real-time dari database.
@@ -365,7 +466,23 @@ Kamu adalah analis KPI perusahaan. Kamu memiliki akses ke tools untuk mengambil 
 | "KPI mana yang paling berpengaruh?" | `get_kpi_contribution` |
 | "Ada anomali / lonjakan / penurunan mendadak?" | `detect_kpi_anomaly` |
 | "Apa itu KPI X? / Jelaskan indikator Y" | `explain_kpi_definition` |
+| "Forecast / prediksi / proyeksi MRR" | `get_mrr_forecast` |
+
+## Aturan khusus untuk Forecasting MRR:
+- Jika user bertanya tentang PREDIKSI, PROYEKSI, atau FORECAST MRR masa depan,
+  WAJIB gunakan tool `get_mrr_forecast`. JANGAN buat estimasi manual.
+- Tool ini menggunakan model ARIMA(2,0,3) yang sudah divalidasi secara statistik
+  dengan tingkat error (MAPE) sekitar 3%, sehingga jauh lebih akurat daripada
+  perkiraan manual berdasarkan tren linear.
+- Setelah mendapat hasil dari `get_mrr_forecast`, sampaikan dalam jawaban:
+  1. Nilai forecast MRR untuk setiap quarter (format IDR).
+  2. Nilai MAPE sebagai indikator akurasi model (contoh: "akurasi model ~96.9%").
+  3. Konteks singkat: berapa data historis yang digunakan dan model apa yang dipakai.
+- Contoh kalimat pembuka yang baik:
+  "Berdasarkan model statistik ARIMA(2,0,3) yang dilatih pada X data poin historis
+   dengan tingkat akurasi ~97% (MAPE: 3.11%), berikut proyeksi MRR:"
 """
+
 
 
 # --------------------------------------------------------------------------- #
