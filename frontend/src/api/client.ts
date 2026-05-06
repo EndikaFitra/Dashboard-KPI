@@ -112,6 +112,7 @@ export interface DivisionDetailData {
   total_kpis: number;
   on_target: number;
   on_progress: number;
+  below_target: number;
   kpis: KpiItem[];
 }
 
