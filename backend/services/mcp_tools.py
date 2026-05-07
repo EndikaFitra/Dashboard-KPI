@@ -489,7 +489,7 @@ def get_division_kpi(db: Session, division_id: int, year: int) -> Dict[str, Any]
         "status":          result["status"],
         "total_kpis":      result["total_kpis"],
         "on_target":       result["on_target"],
-        "near_target":     near,
+        "on_progress":     near,
         "below_target":    below,
         "kpis":            kpi_items,
         "metadata":        _meta(),

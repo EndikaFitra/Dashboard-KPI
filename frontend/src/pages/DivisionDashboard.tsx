@@ -379,7 +379,7 @@ export default function DivisionDashboard() {
           <SelectTrigger className="w-28 h-8 text-sm bg-background shrink-0">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-48 overflow-y-auto">
             {(years ?? [year]).map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -400,16 +400,20 @@ export default function DivisionDashboard() {
           <CardContent className="px-5 pb-4 space-y-2">
             <p className="text-4xl font-black">{divReport.toFixed(2)}%</p>
             <p className="text-[11px] opacity-60">Σ (Annual Report × Bobot) / 100</p>
-            <div className="flex gap-4 pt-1 border-t border-current/10">
-              <div className="text-center">
+            <div className="flex gap-3 pt-1 border-t border-current/10">
+              <div className="text-center flex-1">
                 <p className="text-lg font-bold">{division.on_target ?? 0}</p>
                 <p className="text-[10px] opacity-60">On Target</p>
               </div>
-              <div className="text-center">
+              <div className="text-center flex-1">
                 <p className="text-lg font-bold">{division.on_progress ?? 0}</p>
                 <p className="text-[10px] opacity-60">Near Target</p>
               </div>
-              <div className="text-center">
+              <div className="text-center flex-1">
+                <p className="text-lg font-bold">{division.below_target ?? (kpis.length - (division.on_target ?? 0) - (division.on_progress ?? 0))}</p>
+                <p className="text-[10px] opacity-60">Below Target</p>
+              </div>
+              <div className="text-center flex-1">
                 <p className="text-lg font-bold">{kpis.length}</p>
                 <p className="text-[10px] opacity-60">Total KPI</p>
               </div>

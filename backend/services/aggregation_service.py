@@ -158,8 +158,8 @@ def calculate_division_report(db: Session, division_id: int, year: int) -> Dict[
         2
     )
 
-    on_target   = sum(1 for k in kpis if k["annual_report"] >= 100)
-    on_progress = sum(1 for k in kpis if k["annual_report"] < 100)
+    on_target   = sum(1 for k in kpis if k["status"] == "green")
+    on_progress = sum(1 for k in kpis if k["status"] == "yellow")
 
     return {
         "division_id":      div.division_id,
