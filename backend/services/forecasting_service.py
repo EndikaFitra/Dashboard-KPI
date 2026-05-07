@@ -141,6 +141,8 @@ def get_mrr_forecast(
     actual_values = series.values
     fitted_arr = fitted_values.values
     mape = float(np.mean(np.abs((actual_values - fitted_arr) / actual_values)) * 100)
+    # Hitung MAE (Mean Absolute Error)
+    mae = float(np.mean(np.abs(actual_values - fitted_arr)))
 
     # ── 7. Build response ────────────────────────────────────────────────── #
     # Tentukan year/quarter terakhir dari data
@@ -183,7 +185,8 @@ def get_mrr_forecast(
         "arima_order": list(order),
         "data_points": len(series),
         "mape": round(mape, 4),
-        "aic": round(float(model_fit.aic), 2),
+        # "aic": round(float(model_fit.aic), 2),
+        "mae": round(mae, 2), # Meggantikan aic
         "actual": actual_list,
         "fitted": fitted_list,
         "forecast": forecast_list,

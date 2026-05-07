@@ -13,8 +13,8 @@ import { getMrrForecast } from "@/api/client";
 import type { MrrForecastData, ForecastPoint } from "@/api/client";
 
 // ── Chart colors ──────────────────────────────────────────────────────── //
-const COLOR_ACTUAL  = "hsl(220, 70%, 50%)";   // blue
-const COLOR_FITTED  = "hsl(30, 90%, 55%)";     // orange
+const COLOR_ACTUAL = "hsl(220, 70%, 50%)";   // blue
+const COLOR_FITTED = "hsl(30, 90%, 55%)";     // orange
 const COLOR_FORECAST = "hsl(152, 60%, 42%)";   // green
 
 // ── Number formatting ─────────────────────────────────────────────────── //
@@ -48,10 +48,11 @@ function buildChartData(data: MrrForecastData) {
 
   // Bridge: add the last actual point as the first forecast point
   // so the forecast line connects visually with the actual line
-  const lastActual = data.actual[data.actual.length - 1];
+  // Bridge ini akan memasukkan nilai aktual terakhir ke kategori forecast
+  /* const lastActual = data.actual[data.actual.length - 1];
   if (lastActual) {
     chartData[chartData.length - 1].forecast = lastActual.value;
-  }
+  }*/
 
   // Forecast points
   data.forecast.forEach((f: ForecastPoint) => {
@@ -107,16 +108,20 @@ function StatCard({
   return (
     <Card className={`border shadow-none ${accent ? "border-emerald-200 bg-emerald-50/50" : "border-slate-100"}`}>
       <CardContent className="px-5 py-4 flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-          accent ? "bg-emerald-100" : "bg-slate-100"
-        }`}>
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${accent ? "bg-emerald-100" : "bg-slate-100"
+          }`}>
           <Icon className={`w-4.5 h-4.5 ${accent ? "text-emerald-600" : "text-slate-500"}`} />
         </div>
         <div className="min-w-0">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
-          <p className={`text-lg font-black leading-tight mt-0.5 ${accent ? "text-emerald-700" : "text-slate-800"}`}>
+          {/*<p className={`text-lg font-black leading-tight mt-0.5 ${accent ? "text-emerald-700" : "text-slate-800"}`}>
+            {value}
+          </p>*/}
+          {/* Gunakan text-base agar sedikit lebih kecil dan whitespace-nowrap agar tidak turun ke bawah*/}
+          <p className={`text-base font-black leading-tight mt-0.5 whitespace-nowrap ${accent ? "text-emerald-700" : "text-slate-800"}`}>
             {value}
           </p>
+
           {sub && <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>}
         </div>
       </CardContent>
@@ -246,11 +251,18 @@ export default function ForecastPage() {
           sub="Mean Absolute Percentage Error"
           accent
         />
-        <StatCard
+        {/*<StatCard
           icon={Hash}
           label="AIC"
           value={data.aic.toLocaleString("id-ID")}
           sub="Akaike Information Criterion"
+        />*/}
+        <StatCard
+          icon={Target}              // Gunakan icon yang sama dengan MAPE
+          label="MAE"               // Ubah label
+          value={fmtMRRFull(data.mae)} // Gunakan format mata uang (Rp)
+          sub="Mean Absolute Error" // Keterangan detail
+          accent                     // Tambahkan ini agar tampilan sama (hijau muda) seperti MAPE
         />
       </div>
 
@@ -358,8 +370,8 @@ export default function ForecastPage() {
                 {data.mape < 5
                   ? " sangat rendah — model memiliki akurasi yang baik."
                   : data.mape < 10
-                  ? " cukup rendah — model memiliki akurasi yang acceptable."
-                  : " perlu diperhatikan — pertimbangkan tuning parameter atau model lain."
+                    ? " cukup rendah — model memiliki akurasi yang acceptable."
+                    : " perlu diperhatikan — pertimbangkan tuning parameter atau model lain."
                 }
                 {" "}Forecast dilakukan untuk <strong>{data.forecast.length} quarter</strong> ke depan
                 berdasarkan <strong>{data.data_points} data points</strong> historis.

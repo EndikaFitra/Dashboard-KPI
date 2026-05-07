@@ -304,7 +304,7 @@ export const adminGetPeriods = (period_type?: string, kpi_id?: number) =>
   api.get<PeriodMeta[]>("/admin/meta/periods", {
     params: {
       ...(period_type ? { period_type } : {}),
-      ...(kpi_id     ? { kpi_id }      : {}),
+      ...(kpi_id ? { kpi_id } : {}),
     },
   }).then((r) => r.data);
 
@@ -326,7 +326,8 @@ export interface MrrForecastData {
   arima_order: number[];
   data_points: number;
   mape: number;
-  aic: number;
+  // aic: number;
+  mae: number; //Memperbarui definisi datanya agar typescript mengenali perubahan di backend
   actual: ForecastPoint[];
   fitted: ForecastPoint[];
   forecast: ForecastPoint[];
