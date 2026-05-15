@@ -107,20 +107,22 @@ function KpiSection({
     return { period: name, [String(year)]: e.curr ?? null, [String(year - 1)]: e.prev ?? null };
   });
 
-  // ── Trend: prev year periods + current year periods as one timeline ────────
+  // ── Trend: same X-axis (period_name), both years overlaid on one chart ───────
   const prevYear = year - 1;
-  const trendData = [
-    ...prevPeriods.map((p) => ({
-      label: `${prevYear}/${p.period_name}`,
-      [String(prevYear)]: p.achievement,
-      [String(year)]: null as number | null,
-    })),
-    ...periods.map((p) => ({
-      label: `${year}/${p.period_name}`,
-      [String(prevYear)]: null as number | null,
-      [String(year)]: p.achievement,
-    })),
-  ];
+  // Union semua period_name, urutan dari tahun sekarang lalu tambah dari tahun lalu jika ada ekstra
+  const allPeriodNames: string[] = [];
+  periods.forEach((p) => { if (!allPeriodNames.includes(p.period_name)) allPeriodNames.push(p.period_name); });
+  prevPeriods.forEach((p) => { if (!allPeriodNames.includes(p.period_name)) allPeriodNames.push(p.period_name); });
+
+  const currAchMap = new Map(periods.map((p) => [p.period_name, p.achievement]));
+  const prevAchMap = new Map(prevPeriods.map((p) => [p.period_name, p.achievement]));
+
+  // Setiap titik di X mengandung nilai KEDUA tahun → kedua garis terhubung penuh & bisa bersilangan
+  const trendData = allPeriodNames.map((name) => ({
+    period: name,
+    [String(year)]: currAchMap.get(name) ?? null,
+    [String(prevYear)]: prevAchMap.get(name) ?? null,
+  }));
 
   return (
     <section id={`kpi-${kpi.kpi_id}`} className="scroll-mt-6 space-y-3">
@@ -261,7 +263,7 @@ function KpiSection({
         </CardContent>
       </Card>
 
-      {/* ── Row 3: Trend (full width line chart) ── */}
+      {/* ── Row 3: Trend — single chart, dua line (year vs year-1) di X-axis yang sama ── */}
       <Card className="border border-slate-100 shadow-none">
         <CardHeader className="pb-1 pt-3 px-4">
           <CardTitle className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
@@ -270,30 +272,29 @@ function KpiSection({
         </CardHeader>
         <CardContent className="px-0 pb-3">
           {trendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={trendData} margin={{ top: 4, right: 16, left: 0, bottom: 28 }}>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={trendData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,13%,93%)" vertical={false} />
                 <XAxis
-                  dataKey="label" tick={{ fontSize: 9 }}
-                  angle={-25} textAnchor="end" height={36}
-                  axisLine={false} tickLine={false}
+                  dataKey="period" tick={{ fontSize: 11 }}
+                  axisLine={false} tickLine={false} height={28}
                 />
                 <YAxis domain={[0, 130]} ticks={[0, 25, 50, 75, 100, 130]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
                 <Tooltip
                   contentStyle={{ borderRadius: 8, border: "1px solid hsl(220,13%,91%)", boxShadow: "0 4px 16px rgba(0,0,0,.08)", fontSize: 12 }}
                   formatter={(v: unknown, name: string) => [v != null ? (v as number).toFixed(1) + "%" : "–", name]}
                 />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                 <Line
                   dataKey={String(year)} stroke={color} strokeWidth={2.5}
-                  dot={{ r: 4, fill: color, strokeWidth: 0 }} activeDot={{ r: 6 }}
-                  connectNulls={false}
+                  dot={{ r: 4.5, fill: color, strokeWidth: 0 }} activeDot={{ r: 6 }}
+                  connectNulls={true}
                 />
                 <Line
-                  dataKey={String(year - 1)} stroke="hsl(220,13%,70%)" strokeWidth={1.5}
+                  dataKey={String(year - 1)} stroke="hsl(220,13%,65%)" strokeWidth={2}
                   strokeDasharray="5 4"
-                  dot={{ r: 3, fill: "hsl(220,13%,70%)", strokeWidth: 0 }} activeDot={{ r: 5 }}
-                  connectNulls={false}
+                  dot={{ r: 3.5, fill: "hsl(220,13%,65%)", strokeWidth: 0 }} activeDot={{ r: 5 }}
+                  connectNulls={true}
                 />
               </LineChart>
             </ResponsiveContainer>
