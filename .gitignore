@@ -124,3 +124,7 @@ temp/
 *.swp
 .antigravity/
 .vscode/settings.json
+
+# Folder myvenv
+
+backend/myvenv/
