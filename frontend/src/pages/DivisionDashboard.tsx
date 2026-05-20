@@ -13,6 +13,8 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, Legend,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  PieChart, Pie, Cell,
 } from "recharts";
 import { useDivision, useAvailableYears } from "@/hooks/useKpiData";
 import type { KpiItem, PeriodDetail } from "@/api/client";
@@ -232,34 +234,136 @@ function KpiSection({
         </Card>
       </div>
 
-      {/* ── Row 2: Perbandingan tahun (full width bar chart) ── */}
+      {/* ── Row 2: Perbandingan periode ── */}
       <Card className="border border-slate-100 shadow-none">
         <CardHeader className="pb-1 pt-3 px-4">
           <CardTitle className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
-            Perbandingan {year} vs {year - 1}
+            {kpi.evaluation_period === "M"
+              ? `Perbandingan ${year} vs ${year - 1}`
+              : `Realisasi per Periode — ${year}`}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-0 pb-3">
-          {compData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={compData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,13%,93%)" vertical={false} />
-                <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 130]} ticks={[0, 25, 50, 75, 100, 130]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 8, border: "1px solid hsl(220,13%,91%)", boxShadow: "0 4px 16px rgba(0,0,0,.08)", fontSize: 12 }}
-                  formatter={(v: unknown, name: string) => [v != null ? (v as number).toFixed(1) + "%" : "–", name]}
-                />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                <Bar dataKey={String(year)} fill={color} radius={[4, 4, 0, 0]} maxBarSize={40} />
-                <Bar dataKey={String(year - 1)} fill="hsl(220,13%,80%)" radius={[4, 4, 0, 0]} maxBarSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[160px] flex items-center justify-center text-slate-400 text-xs">
-              Belum ada data tahun {year - 1}
-            </div>
+
+          {/* ── M: Bar Chart grouped per periode ── */}
+          {kpi.evaluation_period === "M" && (
+            compData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={compData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220,13%,93%)" vertical={false} />
+                  <XAxis dataKey="period" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 130]} ticks={[0, 25, 50, 75, 100, 130]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: "1px solid hsl(220,13%,91%)", boxShadow: "0 4px 16px rgba(0,0,0,.08)", fontSize: 12 }}
+                    formatter={(v: unknown, name: string) => [v != null ? (v as number).toFixed(1) + "%" : "–", name]}
+                  />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                  <Bar dataKey={String(year)} fill={color} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey={String(year - 1)} fill="hsl(220,13%,80%)" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[160px] flex items-center justify-center text-slate-400 text-xs">
+                Belum ada data tahun {year - 1}
+              </div>
+            )
           )}
+
+          {/* ── H / Q: Pie Chart per periode — tahun ini vs tahun lalu ── */}
+          {(kpi.evaluation_period === "H" || kpi.evaluation_period === "Q") && (
+            periods.length > 0 ? (() => {
+              // Buat map period_name → prevPeriod untuk lookup cepat
+              const prevByName = new Map(prevPeriods.map((p) => [p.period_name, p]));
+              const cols = periods.length <= 2 ? "grid-cols-2"
+                         : periods.length <= 3 ? "grid-cols-3" : "grid-cols-4";
+
+              // ── helper: render satu donut ──────────────────────────────
+              const renderDonut = (ach: number, unit: string, real: number, tgt: number, dimmed = false) => {
+                const capped = Math.min(ach, 100);
+                const gap = Math.max(0, 100 - capped);
+                const isOn   = ach >= 100;
+                const isNear = ach >= 80 && ach < 100;
+                const fill   = dimmed
+                  ? "hsl(220,13%,70%)"
+                  : isOn ? "hsl(152,60%,42%)" : isNear ? "hsl(38,92%,50%)" : "hsl(0,72%,51%)";
+                return (
+                  <div className="flex flex-col items-center">
+                    <ResponsiveContainer width="100%" height={120}>
+                      <PieChart>
+                        <Pie
+                          data={[{ name: "Realisasi", value: capped }, { name: "Gap", value: gap }]}
+                          cx="50%" cy="50%"
+                          innerRadius="50%" outerRadius="78%"
+                          startAngle={90} endAngle={-270}
+                          dataKey="value" strokeWidth={0}
+                        >
+                          <Cell fill={fill} />
+                          <Cell fill="hsl(220,13%,93%)" />
+                        </Pie>
+                        <Tooltip
+                          formatter={(v: unknown, name: string) => [`${(v as number).toFixed(1)}%`, name]}
+                          contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid hsl(220,13%,91%)", boxShadow: "0 2px 8px rgba(0,0,0,.06)" }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <p className={`-mt-3 text-sm font-black ${dimmed ? "text-slate-500" : isOn ? "text-emerald-600" : isNear ? "text-amber-500" : "text-red-500"}`}>
+                      {ach.toFixed(1)}%
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {real.toLocaleString("id-ID")} / {tgt.toLocaleString("id-ID")} {unit}
+                    </p>
+                  </div>
+                );
+              };
+
+              return (
+                <div className={`grid ${cols} gap-x-4 gap-y-2 px-4 pb-2`}>
+                  {periods.map((p) => {
+                    const prev = prevByName.get(p.period_name);
+                    const delta = prev ? p.achievement - prev.achievement : null;
+                    return (
+                      <div key={p.period_id} className="flex flex-col gap-1 border border-slate-100 rounded-xl p-3">
+                        {/* Period label */}
+                        <p className="text-[11px] font-bold text-slate-600 text-center">{p.period_name}</p>
+
+                        {/* Tahun ini */}
+                        <p className="text-[10px] text-slate-400 text-center">{year}</p>
+                        {renderDonut(p.achievement, kpi.unit, p.realization, p.target)}
+
+                        {/* Delta badge */}
+                        {delta !== null && (
+                          <div className={`flex items-center justify-center gap-1 text-[11px] font-semibold py-0.5 rounded-full ${
+                            delta >= 0 ? "text-emerald-600 bg-emerald-50" : "text-red-500 bg-red-50"
+                          }`}>
+                            {delta >= 0
+                              ? <ArrowUpRight className="w-3 h-3" />
+                              : <ArrowDownRight className="w-3 h-3" />}
+                            {Math.abs(delta).toFixed(1)}% vs {year - 1}
+                          </div>
+                        )}
+                        {delta === null && (
+                          <p className="text-[10px] text-slate-300 text-center py-0.5">– no prev data</p>
+                        )}
+
+                        {/* Tahun lalu */}
+                        <p className="text-[10px] text-slate-400 text-center">{year - 1}</p>
+                        {prev
+                          ? renderDonut(prev.achievement, kpi.unit, prev.realization, prev.target, true)
+                          : <div className="h-[120px] flex items-center justify-center text-[10px] text-slate-300">–</div>
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
+            : (
+              <div className="h-[160px] flex items-center justify-center text-slate-400 text-xs">
+                Belum ada data periode
+              </div>
+            )
+          )}
+
         </CardContent>
       </Card>
 
@@ -313,6 +417,7 @@ function KpiSection({
 export default function DivisionDashboard() {
   const { divisionId } = useParams<{ divisionId: string }>();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [selectedKpiId, setSelectedKpiId] = useState<number | null>(null);
   const { data: years } = useAvailableYears();
 
   // Set default year to the latest available year from DB on load
@@ -331,6 +436,13 @@ export default function DivisionDashboard() {
 
   const prevKpiMap = new Map<number, KpiItem>();
   (prevDivision?.kpis ?? []).forEach((k: KpiItem) => prevKpiMap.set(k.kpi_id, k));
+
+  // Auto-select first KPI when division data loads
+  useEffect(() => {
+    if (division?.kpis && division.kpis.length > 0 && selectedKpiId === null) {
+      setSelectedKpiId(division.kpis[0].kpi_id);
+    }
+  }, [division, selectedKpiId]);
 
   // Scroll to anchor on load/navigation
   useEffect(() => {
@@ -365,6 +477,11 @@ export default function DivisionDashboard() {
   const divReport: number = division.division_report ?? division.avg_achievement ?? 0;
   const divStatus = divReport >= 100 ? "green" : divReport >= 80 ? "yellow" : "red";
 
+  // Find the selected KPI or fall back to the first one
+  const activeKpiIdx = kpis.findIndex((k) => k.kpi_id === selectedKpiId);
+  const activeIdx = activeKpiIdx >= 0 ? activeKpiIdx : 0;
+  const activeKpi = kpis[activeIdx] ?? null;
+
   return (
     <div className="space-y-5">
 
@@ -376,14 +493,32 @@ export default function DivisionDashboard() {
           <h1 className="text-xl font-bold tracking-tight">{division.division_name}</h1>
           <p className="text-xs text-muted-foreground mt-0.5">KPI Dashboard · {year}</p>
         </div>
-        <Select value={String(year)} onValueChange={(v) => setSelectedYear(Number(v))}>
-          <SelectTrigger className="w-28 h-8 text-sm bg-background shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="max-h-48 overflow-y-auto">
-            {(years ?? [year]).map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* KPI Indicator filter */}
+          <Select
+            value={selectedKpiId !== null ? String(selectedKpiId) : ""}
+            onValueChange={(v) => setSelectedKpiId(Number(v))}
+          >
+            <SelectTrigger className="h-8 text-sm bg-background max-w-[220px] min-w-[160px]">
+              <SelectValue placeholder="Pilih Indikator" />
+            </SelectTrigger>
+            <SelectContent>
+              {kpis.map((k) => (
+                <SelectItem key={k.kpi_id} value={String(k.kpi_id)}>{k.kpi_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Year filter */}
+          <Select value={String(year)} onValueChange={(v) => setSelectedYear(Number(v))}>
+            <SelectTrigger className="w-24 h-8 text-sm bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-48 overflow-y-auto">
+              {(years ?? [year]).map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -445,6 +580,80 @@ export default function DivisionDashboard() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
+          RADAR CHART — Realisasi per Indikator
+      ══════════════════════════════════════════════════════════════════ */}
+      <Card className="border border-slate-100 shadow-none">
+        <CardHeader className="pb-1 pt-4 px-5">
+          <CardTitle className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
+            Radar Realisasi Indikator
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          {kpis.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <RadarChart
+                data={kpis.map((k) => ({
+                  subject: k.kpi_name,
+                  kontribusi: parseFloat(((k.annual_report * k.weight) / 100).toFixed(2)),
+                  target: k.weight,  // max kontribusi = bobot penuh
+                }))}
+                margin={{ top: 10, right: 30, bottom: 10, left: 30 }}
+              >
+                <PolarGrid stroke="hsl(220,13%,91%)" />
+                <PolarAngleAxis
+                  dataKey="subject"
+                  tick={{ fontSize: 11, fill: "hsl(220,9%,46%)" }}
+                  tickLine={false}
+                />
+                <PolarRadiusAxis
+                  angle={90}
+                  domain={[0, Math.max(...kpis.map((k) => k.weight), 10)]}
+                  tick={{ fontSize: 9, fill: "hsl(220,9%,65%)" }}
+                  tickCount={4}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Radar
+                  name="Maks. Kontribusi (Bobot)"
+                  dataKey="target"
+                  stroke="hsl(220,13%,80%)"
+                  fill="hsl(220,13%,80%)"
+                  fillOpacity={0.15}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+                <Radar
+                  name="Kontribusi Aktual"
+                  dataKey="kontribusi"
+                  stroke="hsl(152,60%,42%)"
+                  fill="hsl(152,60%,42%)"
+                  fillOpacity={0.25}
+                  strokeWidth={2}
+                />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 11 }}
+                />
+                <Tooltip
+                  formatter={(val: number, name: string) => [`${val.toFixed(2)}%`, name]}
+                  contentStyle={{
+                    fontSize: 12,
+                    borderRadius: 8,
+                    border: "1px solid hsl(220,13%,91%)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,.06)",
+                  }}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[300px] flex items-center justify-center text-slate-400 text-xs">
+              Belum ada data indikator.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ══════════════════════════════════════════════════════════════════
           DAFTAR KPI — full width table
       ══════════════════════════════════════════════════════════════════ */}
       <Card className="border border-slate-100 shadow-none overflow-hidden">
@@ -468,12 +677,18 @@ export default function DivisionDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {kpis.map((kpi, idx) => {
+              {kpis.map((kpi, idx) => {
                   const c = CHART_COLORS[idx % CHART_COLORS.length];
                   const st = kpi.status ?? "red";
+                  const isSelected = kpi.kpi_id === (activeKpi?.kpi_id);
                   return (
                     <tr key={kpi.kpi_id}
-                      className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                      onClick={() => setSelectedKpiId(kpi.kpi_id)}
+                      className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-primary/5 ring-1 ring-inset ring-primary/20"
+                          : "hover:bg-slate-50/60"
+                      }`}>
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c }} />
@@ -481,7 +696,7 @@ export default function DivisionDashboard() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-center">
-                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">
+                        <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded font-medium">
                           {EVAL_LABEL[kpi.evaluation_period] ?? kpi.evaluation_period}
                         </span>
                       </td>
@@ -500,13 +715,11 @@ export default function DivisionDashboard() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-center">
-                        <button
-                          onClick={() => document.getElementById(`kpi-${kpi.kpi_id}`)
-                            ?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                          className="text-[11px] text-blue-600 hover:text-blue-800 font-medium hover:underline"
-                        >
-                          ↓ Detail
-                        </button>
+                        <span className={`text-[11px] font-semibold ${
+                          isSelected ? "text-primary" : "text-slate-400"
+                        }`}>
+                          {isSelected ? "● Aktif" : "○ Pilih"}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -525,18 +738,22 @@ export default function DivisionDashboard() {
       </Card>
 
       {/* ══════════════════════════════════════════════════════════════════
-          PER-KPI SECTIONS
+          DETAIL KPI — tampilkan satu KPI sesuai filter
       ══════════════════════════════════════════════════════════════════ */}
-      <div className="space-y-8 pb-8">
-        {kpis.map((kpi, idx) => (
+      <div className="pb-8">
+        {activeKpi ? (
           <KpiSection
-            key={kpi.kpi_id}
-            kpi={kpi}
-            prevKpi={prevKpiMap.get(kpi.kpi_id)}
-            idx={idx}
+            key={activeKpi.kpi_id}
+            kpi={activeKpi}
+            prevKpi={prevKpiMap.get(activeKpi.kpi_id)}
+            idx={activeIdx}
             year={year}
           />
-        ))}
+        ) : (
+          <div className="flex items-center justify-center h-32 text-slate-400 text-sm">
+            Pilih indikator di tabel di atas untuk melihat detail.
+          </div>
+        )}
       </div>
     </div>
   );

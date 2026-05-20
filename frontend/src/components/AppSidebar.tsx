@@ -1,12 +1,9 @@
 import {
   Wifi, Code, TrendingUp, Users, MessageSquare,
-  BarChart2, ChevronDown, ChevronRight, Hash, LineChart as LineChartIcon,
+  BarChart2, LineChart as LineChartIcon,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { adminGetKpi } from "@/api/client";
 import {
   Sidebar,
   SidebarContent,
@@ -26,8 +23,6 @@ const DIVISIONS = [
   { id: 4, slug: "hr-officer",        title: "HR Officer",        icon: Users },
 ];
 
-const EVAL_BADGE: Record<string, string> = { M: "M", Q: "Q", H: "H" };
-
 function DivisionNavItem({
   div,
   collapsed,
@@ -38,69 +33,19 @@ function DivisionNavItem({
   isActive: boolean;
 }) {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(isActive);
-
-  const { data: kpis = [] } = useQuery({
-    queryKey: ["sidebar-kpis", div.id],
-    queryFn: () => adminGetKpi(div.id),
-    staleTime: 5 * 60_000,
-    enabled: open || isActive,
-  });
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={isActive}
-        className="cursor-pointer w-full group"
-        onClick={() => { navigate(`/${div.slug}`); setOpen(true); }}
+        className="cursor-pointer w-full"
+        onClick={() => navigate(`/${div.slug}`)}
       >
         <div.icon className="w-4 h-4 shrink-0" />
         {!collapsed && (
-          <>
-            <span className="flex-1 text-left truncate">{div.title}</span>
-            <span
-              role="button"
-              onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-              className="ml-auto p-0.5 rounded hover:bg-sidebar-accent/40 transition-colors opacity-0 group-hover:opacity-100"
-            >
-              {open
-                ? <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-                : <ChevronRight className="w-3.5 h-3.5 opacity-60" />}
-            </span>
-          </>
+          <span className="flex-1 text-left truncate">{div.title}</span>
         )}
       </SidebarMenuButton>
-
-      {/* KPI sub-items */}
-      {open && !collapsed && kpis.length > 0 && (
-        <ul className="mt-0.5 ml-4 border-l border-sidebar-border pl-2 space-y-0.5">
-          {kpis.map((kpi: any) => (
-            <li key={kpi.kpi_id}>
-              <button
-                onClick={() => {
-                  const el = document.getElementById(`kpi-${kpi.kpi_id}`);
-                  if (el) {
-                    el.scrollIntoView({ behavior: "smooth", block: "start" });
-                  } else {
-                    // navigate first, then scroll
-                    navigate(`/${div.slug}`);
-                    setTimeout(() => {
-                      document.getElementById(`kpi-${kpi.kpi_id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }, 400);
-                  }
-                }}
-                className="w-full flex items-start gap-1.5 px-2 py-1 rounded-md text-left text-[11px] text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
-              >
-                <Hash className="w-3 h-3 mt-0.5 shrink-0 opacity-40" />
-                <span className="flex-1 truncate leading-tight">{kpi.kpi_name}</span>
-                <span className="shrink-0 text-[9px] font-bold bg-sidebar-accent/60 rounded px-1 py-0.5">
-                  {EVAL_BADGE[kpi.evaluation_period] ?? kpi.evaluation_period}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </SidebarMenuItem>
   );
 }
