@@ -14,3 +14,4 @@ pandas
 statsmodels
 numpy
 scikit-learn
+scipy

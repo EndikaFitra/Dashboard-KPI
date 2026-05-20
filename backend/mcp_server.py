@@ -46,6 +46,8 @@ from services.mcp_tools import (
     get_kpi_contribution    as _contribution,
     detect_kpi_anomaly      as _anomaly,
     explain_kpi_definition  as _explain,
+    get_cluster_analysis    as _cluster_analysis,
+    explain_cluster_method  as _cluster_explain,
     validate_query_intent,
 )
 
@@ -179,6 +181,16 @@ def fn_get_mrr_forecast(p: int = 2, d: int = 0, q: int = 3) -> dict:
     return _db_call(_get_mrr_forecast, (p, d, q), 4)
 
 
+def fn_get_cluster_analysis() -> dict:
+    """Ambil hasil clustering Agglomerative Hierarchical untuk indikator Sales."""
+    return _db_call(_cluster_analysis)
+
+
+def fn_explain_cluster_method() -> dict:
+    """Penjelasan metode clustering yang digunakan."""
+    return _cluster_explain()
+
+
 # --------------------------------------------------------------------------- #
 # TOOL_REGISTRY
 # --------------------------------------------------------------------------- #
@@ -204,6 +216,9 @@ TOOL_REGISTRY: dict = {
     # Mendaftarkan fn_get_mrr_forecast agar AI bisa memanggilnya
     # saat user bertanya tentang prediksi atau proyeksi MRR.
     "get_mrr_forecast":        fn_get_mrr_forecast,
+    # Clustering
+    "get_cluster_analysis":    fn_get_cluster_analysis,
+    "explain_cluster_method":  fn_explain_cluster_method,
 }
 
 
@@ -415,6 +430,41 @@ OLLAMA_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_cluster_analysis",
+            "description": (
+                "Ambil hasil clustering Agglomerative Hierarchical untuk indikator "
+                "divisi Sales (Customer Baru, Quotation, MRR). Gunakan tool ini jika "
+                "user bertanya tentang: 'cluster sales', 'segmentasi', 'pengelompokan "
+                "data', 'profil cluster', 'berapa cluster', atau nama-nama phase (misal "
+                "'Peak Revenue', 'Core Growth', 'Hyper-Acquisition', dsb)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "explain_cluster_method",
+            "description": (
+                "Jelaskan metode clustering yang digunakan dalam analisis Sales. "
+                "Gunakan jika user bertanya: 'metode apa', 'bagaimana cara clustering', "
+                "'apa itu agglomerative', 'apa itu average linkage', 'apa itu silhouette', "
+                "'apa itu BSS/TSS', atau 'bagaimana interpretasi cluster'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -467,6 +517,8 @@ Kamu adalah analis KPI perusahaan. Kamu memiliki akses ke tools untuk mengambil 
 | "Ada anomali / lonjakan / penurunan mendadak?" | `detect_kpi_anomaly` |
 | "Apa itu KPI X? / Jelaskan indikator Y" | `explain_kpi_definition` |
 | "Forecast / prediksi / proyeksi MRR" | `get_mrr_forecast` |
+| "Cluster / segmentasi data sales" | `get_cluster_analysis` |
+| "Metode / algoritma / cara kerja clustering" | `explain_cluster_method` |
 
 ## Aturan khusus untuk Forecasting MRR:
 - Jika user bertanya tentang PREDIKSI, PROYEKSI, atau FORECAST MRR masa depan,
@@ -481,6 +533,16 @@ Kamu adalah analis KPI perusahaan. Kamu memiliki akses ke tools untuk mengambil 
 - Contoh kalimat pembuka yang baik:
   "Berdasarkan model statistik ARIMA(2,0,3) yang dilatih pada X data poin historis
    dengan tingkat akurasi ~97% (MAPE: 3.11%), berikut proyeksi MRR:"
+
+## Aturan khusus untuk Clustering Sales:
+- Jika user bertanya tentang CLUSTER, SEGMENTASI, atau PENGELOMPOKAN data Sales,
+  WAJIB gunakan tool `get_cluster_analysis`.
+- Jika user bertanya tentang METODE atau CARA KERJA clustering,
+  gunakan `explain_cluster_method`.
+- Setelah mendapat hasil, sampaikan:
+  1. Jumlah cluster dan jumlah observasi
+  2. Profil singkat setiap cluster (rata-rata per variabel)
+  3. Metrik evaluasi (silhouette, BSS/TSS, cophenetic) dengan interpretasi
 """
 
 

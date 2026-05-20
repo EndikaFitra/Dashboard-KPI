@@ -11,6 +11,7 @@ import LoginPage from "@/pages/LoginPage";
 import DivisionDashboard from "@/pages/DivisionDashboard";
 import ChatPage from "@/pages/ChatPage";
 import ForecastPage from "@/pages/ForecastPage";
+import ClusterPage from "@/pages/ClusterPage";
 import NotFound from "@/pages/NotFound";
 
 import AdminLayout from "@/pages/admin/AdminLayout";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/" element={<Navigate to="/network" replace />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/forecast" element={<ForecastPage />} />
+            <Route path="/cluster" element={<ClusterPage />} />
             <Route path="/:divisionId" element={<DivisionDashboard />} />
           </Route>
 

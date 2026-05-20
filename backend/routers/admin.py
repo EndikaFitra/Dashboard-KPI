@@ -22,6 +22,8 @@ from services.security import require_admin, hash_password, get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+SALES_CLUSTER_KPI_IDS = {8, 9, 10}
+
 
 # ── Meta endpoints (reference data for forms) ────────────────────────────── #
 
@@ -267,6 +269,14 @@ def create_realization(
             f"(kpi_id={row.kpi_id}, period_id={row.period_id}, year={row.year})"
         )
 
+    if row.kpi_id in SALES_CLUSTER_KPI_IDS:
+        from services.clustering_service import run_full_clustering
+        try:
+            run_full_clustering(db)
+            logger.info("cluster: ✓ Re-clustering triggered after new realization")
+        except Exception as e:
+            logger.warning(f"cluster: re-clustering failed — {e}")
+
     return row
 
 
@@ -295,6 +305,14 @@ def update_realization(
         realization=row.realization,
     )
 
+    if row.kpi_id in SALES_CLUSTER_KPI_IDS:
+        from services.clustering_service import run_full_clustering
+        try:
+            run_full_clustering(db)
+            logger.info("cluster: ✓ Re-clustering triggered after updated realization")
+        except Exception as e:
+            logger.warning(f"cluster: re-clustering failed — {e}")
+
     return row
 
 
@@ -320,6 +338,15 @@ def delete_realization(
     # Dual Write — hapus baris dari CSV sumber data
     from services.csv_sync import delete_realization as csv_delete
     csv_delete(kpi_id=kpi_id_saved, period_id=period_id_saved, year=year_saved)
+
+    if kpi_id_saved in SALES_CLUSTER_KPI_IDS:
+        from services.clustering_service import run_full_clustering
+        try:
+            run_full_clustering(db)
+            logger.info("cluster: ✓ Re-clustering triggered after deleted realization")
+        except Exception as e:
+            logger.warning(f"cluster: re-clustering failed — {e}")
+
 
 # ── User Management ──────────────────────────────────────────────────────── #
 

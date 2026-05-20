@@ -338,3 +338,45 @@ export const getMrrForecast = (p = 2, d = 0, q = 3, n_forecast = 4) =>
   api.get<MrrForecastData>("/forecast/mrr", {
     params: { p, d, q, n_forecast }
   }).then((r) => r.data);
+
+// ── Cluster ───────────────────────────────────────────────────────────── //
+
+export interface ClusterEvaluation {
+  silhouette_score: number;
+  bss_tss_ratio: number;
+  cophenetic_corr: number;
+  n_clusters: number;
+  method: string;
+  n_observations: number;
+  computed_at: string;
+}
+
+export interface ClusterDataRow {
+  observation_index: number;
+  year: number;
+  quarter: string;
+  customer_baru: number;
+  quotation: number;
+  mrr: number;
+  cluster_name: string;
+}
+
+export interface ClusterScatterPoint {
+  customer_baru_norm: number;
+  quotation_norm: number;
+  mrr_norm: number;
+  cluster_name: string;
+}
+
+export interface ClusterResultData {
+  evaluation: ClusterEvaluation;
+  data_table: ClusterDataRow[];
+  scatter_3d: ClusterScatterPoint[];
+  cluster_descriptions: Record<string, string>;
+}
+
+export const getClusterResults = () =>
+  api.get<ClusterResultData>("/cluster/results").then((r) => r.data);
+
+export const postRecomputeCluster = () =>
+  api.post("/cluster/recompute").then((r) => r.data);

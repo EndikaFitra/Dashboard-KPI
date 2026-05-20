@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -171,6 +173,7 @@ function ForecastTable({ data }: { data: MrrForecastData }) {
 
 // ── Main page ─────────────────────────────────────────────────────────── //
 export default function ForecastPage() {
+  const navigate = useNavigate();
   const { data, isLoading, error } = useQuery<MrrForecastData>({
     queryKey: ["mrr-forecast"],
     queryFn: () => getMrrForecast(2, 0, 3, 4),
@@ -216,12 +219,28 @@ export default function ForecastPage() {
       ══════════════════════════════════════════════════════════════════ */}
       <div>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
             <TrendingUp className="w-5 h-5 text-emerald-600" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Statistic Analyst</h1>
-            <p className="text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold tracking-tight">Statistic Analyst</h1>
+              <Select 
+                defaultValue="forecast" 
+                onValueChange={(v) => {
+                  if (v === "cluster") navigate("/cluster");
+                }}
+              >
+                <SelectTrigger className="w-[200px] h-8 text-sm bg-accent/50 border-0 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cluster">Cluster Analysis</SelectItem>
+                  <SelectItem value="forecast">MRR Forecast</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
               MRR Forecasting · ARIMA ({data.arima_order.join(", ")})
             </p>
           </div>
