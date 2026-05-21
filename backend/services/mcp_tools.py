@@ -625,6 +625,69 @@ def compare_divisions(db: Session, year: int) -> Dict[str, Any]:
     return {"year": year, "ranking": ranking, "metadata": _meta()}
 
 
+# ── AI Analyst Clustering Tools ──────────────────────────────────────────── #
+
+def get_cluster_analysis(db: Session) -> dict:
+    from services.clustering_service import get_cluster_results
+    results = get_cluster_results(db)
+    
+    # Hitung jumlah anggota tiap cluster (count)
+    cluster_counts = {}
+    for row in results["data_table"]:
+        name = row["cluster_name"]
+        cluster_counts[name] = cluster_counts.get(name, 0) + 1
+
+    # Agregasi profil cluster berdasarkan rata-rata mrr, quotation, customer baru
+    import pandas as pd
+    df = pd.DataFrame(results["data_table"])
+    profiles = []
+    if not df.empty:
+        agg = df.groupby("cluster_name")[["customer_baru", "quotation", "mrr"]].mean().to_dict(orient="index")
+        for cname, vals in agg.items():
+            profiles.append({
+                "cluster_name": cname,
+                "count": cluster_counts.get(cname, 0),
+                "avg_customer_baru": round(vals["customer_baru"], 2),
+                "avg_quotation": round(vals["quotation"], 2),
+                "avg_mrr": round(vals["mrr"], 2)
+            })
+
+    return {
+        "method": results["evaluation"]["method"],
+        "n_clusters": results["evaluation"]["n_clusters"],
+        "n_observations": results["evaluation"]["n_observations"],
+        "evaluation": {
+            "silhouette_score": results["evaluation"]["silhouette_score"],
+            "bss_tss_ratio": results["evaluation"]["bss_tss_ratio"],
+            "cophenetic_corr": results["evaluation"]["cophenetic_corr"]
+        },
+        "cluster_profiles": profiles,
+        "metadata": _meta()
+    }
+
+
+def explain_cluster_method() -> dict:
+    return {
+        "method_name": "Agglomerative Hierarchical Clustering",
+        "description": "Metode clustering bottom-up yang menggabungkan observasi...",
+        "linkage_method": "Average — menghitung rata-rata jarak antara semua pasangan titik dari dua cluster yang berbeda...",
+        "normalization": "MinMaxScaler — menyamakan skala semua variabel ke 0-1...",
+        "variables_used": ["Customer Baru", "Quotation", "MRR"],
+        "evaluation_metrics": {
+            "silhouette_score": "Mengukur kualitas pemisahan cluster...",
+            "bss_tss_ratio": "Proporsi varians yang dijelaskan oleh cluster...",
+            "cophenetic_corr": "Validitas representasi dendrogram..."
+        },
+        "cluster_definitions": {
+            "Peak Revenue & Premium Efficiency": "Cluster dengan performa finansial terbaik dan akuisisi pelanggan yang efisien...",
+            "Core Growth & Stable Acquisition": "Cluster yang menjadi tulang punggung bisnis dengan stabilitas yang baik...",
+            "Stagnant Acquisition & Slow Down": "Cluster dengan laju akuisisi yang tertahan atau melambat...",
+            "Low-Yield Operational": "Cluster dengan rasio konversi atau revenue terendah...",
+            "Hyper-Acquisition & Market Penetration": "Cluster dengan fokus tinggi pada volume akuisisi customer baru secara agresif..."
+        }
+    }
+
+
 # ── Tool Registry ────────────────────────────────────────────────────────── #
 
 MCP_TOOLS = {
@@ -640,4 +703,7 @@ MCP_TOOLS = {
     "detect_kpi_anomaly":      detect_kpi_anomaly,
     # Semantic
     "explain_kpi_definition":  explain_kpi_definition,
+    # Clustering
+    "get_cluster_analysis":    get_cluster_analysis,
+    "explain_cluster_method":  explain_cluster_method,
 }

@@ -57,6 +57,8 @@ def _reset_sequences():
         ("dim_period",           "dim_period_period_id_seq",         "period_id"),
         ("fact_kpi_performance", "fact_kpi_performance_fact_id_seq", "fact_id"),
         ("users",                "users_id_seq",                     "id"),
+        ("cluster_result",       "cluster_result_id_seq",             "id"),
+        ("cluster_evaluation",   "cluster_evaluation_id_seq",         "id"),
     ]
     db = SessionLocal()
     try:
@@ -86,7 +88,8 @@ async def lifespan(app: FastAPI):
     import models.period         # noqa
     import models.mapping        # noqa
     import models.fact_raw       # noqa
-    import models.user           # noqa  ← NEW
+    import models.user           # noqa
+    import models.cluster        # noqa  ← clustering tables
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ensured.")
     _seed_default_admin()
@@ -110,7 +113,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from routers import dashboard, kpi, mcp, auth, admin, forecast  # noqa
+from routers import dashboard, kpi, mcp, auth, admin, forecast, cluster  # noqa
 
 app.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 app.include_router(kpi.router,       prefix="/kpi",       tags=["KPI"])
@@ -118,6 +121,7 @@ app.include_router(mcp.router,       prefix="/mcp",       tags=["MCP"])
 app.include_router(auth.router,      prefix="/auth",      tags=["Auth"])
 app.include_router(admin.router,     prefix="/admin",     tags=["Admin"])
 app.include_router(forecast.router,  prefix="/forecast",  tags=["Forecast"])
+app.include_router(cluster.router,   prefix="/cluster",   tags=["Cluster"])
 
 
 @app.get("/", tags=["Health"])

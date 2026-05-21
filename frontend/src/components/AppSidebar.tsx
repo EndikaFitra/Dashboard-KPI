@@ -112,8 +112,8 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location.pathname === "/forecast"}>
-                  <NavLink to="/forecast" className="transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                <SidebarMenuButton asChild isActive={location.pathname === "/forecast" || location.pathname === "/cluster"}>
+                  <NavLink to="/cluster" className="transition-colors" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
                     <LineChartIcon className="w-4 h-4 shrink-0" />
                     {!collapsed && <span>Statistic Analyst</span>}
                   </NavLink>
