@@ -27,6 +27,7 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import MinMaxScaler
 from sqlalchemy.orm import Session
+from sklearn.decomposition import PCA
 
 from models.cluster import ClusterResult, ClusterEvaluation
 
@@ -126,8 +127,18 @@ def _fetch_sales_data(db: Session) -> pd.DataFrame:
     # Drop baris yang tidak lengkap (kurang dari 3 KPI)
     df_wide = df_wide.dropna(subset=["customer_baru", "quotation", "mrr"]).reset_index(drop=True)
 
+    # Guard: minimal harus ada cukup baris untuk N_CLUSTERS
+    if len(df_wide) < N_CLUSTERS:
+        raise ValueError(
+            f"Data tidak cukup untuk clustering: hanya tersedia {len(df_wide)} observasi "
+            f"dengan ketiga KPI lengkap (Customer Baru, Quotation, MRR), "
+            f"minimal dibutuhkan {N_CLUSTERS}. "
+            f"Pastikan data ketiga KPI Sales sudah terinput untuk periode yang sama."
+        )
+
     logger.info(f"cluster: fetched {len(df_wide)} observations from database")
     return df_wide
+
 
 
 # ── Fungsi 2: Normalisasi data ───────────────────────────────────────────── #
@@ -378,10 +389,11 @@ def _build_response(db: Session) -> Dict:
         "computed_at": eval_row.computed_at.isoformat(),
     }
 
-    # Build data_table (data asli + cluster name)
+    # Build data_table (data asli + cluster name + label periode)
     data_table = [
         {
             "observation_index": r.observation_index,
+            "periode": f"{r.year}-{r.quarter}",   # e.g. "2016-Q1"
             "year": r.year,
             "quarter": r.quarter,
             "customer_baru": r.customer_baru,
@@ -392,6 +404,7 @@ def _build_response(db: Session) -> Dict:
         for r in results
     ]
 
+
     # Build scatter_3d (data ternormalisasi + cluster name)
     scatter_3d = [
         {
@@ -401,6 +414,34 @@ def _build_response(db: Session) -> Dict:
             "cluster_name": r.cluster_name,
         }
         for r in results
+    ]
+
+    # Calculate PCA for 2D visualization
+    # PENTING: urutkan results berdasarkan observation_index agar enumerate(i) sesuai
+    import numpy as np
+    results_ordered = sorted(results, key=lambda r: r.observation_index)
+    features = np.array([[r.customer_baru_norm, r.quotation_norm, r.mrr_norm] for r in results_ordered])
+
+    if len(features) > 1:
+        pca = PCA(n_components=2)
+        pca_result = pca.fit_transform(features)
+        explained_variance = pca.explained_variance_ratio_ * 100
+    else:
+        pca_result = np.zeros((len(features), 2))
+        explained_variance = [0, 0]
+
+    scatter_2d = [
+        {
+            "pca_x": float(pca_result[i][0]),
+            "pca_y": float(pca_result[i][1]),
+            # year dan quarter sudah disimpan di ClusterResult saat run_full_clustering
+            "periode": f"{r.year}-{r.quarter}",
+            "customer_baru_norm": float(r.customer_baru_norm),
+            "quotation_norm": float(r.quotation_norm),
+            "mrr_norm": float(r.mrr_norm),
+            "cluster_name": r.cluster_name,
+        }
+        for i, r in enumerate(results_ordered)
     ]
 
     # Cluster descriptions (template terstruktur)
@@ -435,5 +476,10 @@ def _build_response(db: Session) -> Dict:
         "evaluation": evaluation,
         "data_table": data_table,
         "scatter_3d": scatter_3d,
+        "scatter_2d": scatter_2d,
+        "pca_variance": {
+            "pc1": float(explained_variance[0]),
+            "pc2": float(explained_variance[1])
+        },
         "cluster_descriptions": cluster_descriptions,
     }

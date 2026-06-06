@@ -353,6 +353,7 @@ export interface ClusterEvaluation {
 
 export interface ClusterDataRow {
   observation_index: number;
+  periode: string;       // e.g. "2016-Q1"
   year: number;
   quarter: string;
   customer_baru: number;
@@ -368,10 +369,27 @@ export interface ClusterScatterPoint {
   cluster_name: string;
 }
 
+export interface ClusterScatter2DPoint {
+  pca_x: number;
+  pca_y: number;
+  periode: string;
+  customer_baru_norm: number;
+  quotation_norm: number;
+  mrr_norm: number;
+  cluster_name: string;
+}
+
+export interface PCAVariance {
+  pc1: number;
+  pc2: number;
+}
+
 export interface ClusterResultData {
   evaluation: ClusterEvaluation;
   data_table: ClusterDataRow[];
   scatter_3d: ClusterScatterPoint[];
+  scatter_2d: ClusterScatter2DPoint[];
+  pca_variance: PCAVariance;
   cluster_descriptions: Record<string, string>;
 }
 
