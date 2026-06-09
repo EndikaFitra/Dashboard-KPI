@@ -344,7 +344,7 @@ export const getMrrForecast = (p = 2, d = 0, q = 3, n_forecast = 4) =>
 export interface ClusterEvaluation {
   silhouette_score: number;
   bss_tss_ratio: number;
-  cophenetic_corr: number;
+  davies_bouldin_index: number;
   n_clusters: number;
   method: string;
   n_observations: number;

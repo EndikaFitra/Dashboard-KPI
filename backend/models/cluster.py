@@ -6,6 +6,7 @@ Tabel:
   - cluster_evaluation : Metrik evaluasi clustering (1 baris per run)
 
 Digunakan oleh: services/clustering_service.py
+Metode: K-Means++ (sklearn KMeans, init='k-means++')
 """
 
 from datetime import datetime
@@ -19,7 +20,7 @@ class ClusterResult(Base):
 
     Setiap baris merepresentasikan satu kombinasi year × quarter
     dengan nilai asli (sebelum normalisasi), nilai ternormalisasi,
-    dan label cluster hasil Agglomerative Hierarchical Clustering.
+    dan label cluster hasil K-Means++ Clustering.
     """
     __tablename__ = "cluster_result"
 
@@ -31,7 +32,7 @@ class ClusterResult(Base):
     customer_baru     = Column(Float, nullable=False)
     quotation         = Column(Float, nullable=False)
     mrr               = Column(Float, nullable=False)
-    # Data ternormalisasi (MinMaxScaler, range 0–1)
+    # Data ternormalisasi (StandardScaler, z-score)
     customer_baru_norm = Column(Float, nullable=False)
     quotation_norm     = Column(Float, nullable=False)
     mrr_norm           = Column(Float, nullable=False)
@@ -47,17 +48,17 @@ class ClusterEvaluation(Base):
 
     Hanya 1 baris aktif pada satu waktu (di-replace setiap re-compute).
     Metrik:
-      - silhouette_score : kualitas pemisahan cluster (-1 s/d 1)
-      - bss_tss_ratio    : proporsi varians yang dijelaskan cluster (0–1)
-      - cophenetic_corr  : validitas representasi dendrogram (0–1)
+      - silhouette_score      : kualitas pemisahan cluster (-1 s/d 1)
+      - bss_tss_ratio         : proporsi varians yang dijelaskan cluster (0–1)
+      - davies_bouldin_index  : indeks Davies-Bouldin (0 = sempurna, lebih kecil lebih baik)
     """
     __tablename__ = "cluster_evaluation"
 
-    id               = Column(Integer, primary_key=True, index=True)
-    silhouette_score = Column(Float, nullable=False)
-    bss_tss_ratio    = Column(Float, nullable=False)
-    cophenetic_corr  = Column(Float, nullable=False)
-    n_clusters       = Column(Integer, nullable=False, default=3)
-    method           = Column(String(20), nullable=False, default="ward")
-    n_observations   = Column(Integer, nullable=False)
-    computed_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    id                   = Column(Integer, primary_key=True, index=True)
+    silhouette_score     = Column(Float, nullable=False)
+    bss_tss_ratio        = Column(Float, nullable=False)
+    davies_bouldin_index = Column(Float, nullable=False)
+    n_clusters           = Column(Integer, nullable=False, default=5)
+    method               = Column(String(20), nullable=False, default="k-means++")
+    n_observations       = Column(Integer, nullable=False)
+    computed_at          = Column(DateTime, default=datetime.utcnow, nullable=False)

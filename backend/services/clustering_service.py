@@ -1,18 +1,15 @@
 """
-Clustering Service — Agglomerative Hierarchical Clustering untuk Sales KPI.
+Clustering Service — K-Means++ Clustering untuk Divisi Sales Executive.
 
 Mengambil data realisasi 3 indikator divisi Sales (Customer Baru, Quotation, MRR)
 dari fact_kpi_performance, menjalankan clustering, menghitung metrik evaluasi,
 dan menyimpan hasilnya ke tabel cluster_result & cluster_evaluation.
 
 Metode:
-  - Algoritma  : Agglomerative Hierarchical Clustering
-  - Linkage    : Ward (meminimalkan kenaikan varians total)
-  - Normalisasi: MinMaxScaler (range 0–1)
-  - Jumlah cluster: 6
-  - Naming     : Adaptif berdasarkan profil rata-rata cluster
-
-Referensi: kode notebook Python milik user (ARIMA-style integration).
+  - Algoritma  : K-Means++ (KMeans, init='k-means++')
+  - Normalisasi: StandardScaler (z-score)
+  - Jumlah cluster: 5
+  - Naming     : Mapping statis berdasarkan referensi cluster profiling
 """
 
 import logging
@@ -21,13 +18,11 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-from scipy.cluster.hierarchy import linkage, cophenet
-from scipy.spatial.distance import pdist
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import MinMaxScaler
-from sqlalchemy.orm import Session
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sqlalchemy.orm import Session
 
 from models.cluster import ClusterResult, ClusterEvaluation
 
@@ -45,7 +40,7 @@ SALES_DIVISION_ID = 3
 PERIOD_TO_QUARTER = {13: "Q1", 14: "Q2", 15: "Q3", 16: "Q4"}
 
 N_CLUSTERS = 5
-LINKAGE_METHOD = "average"
+METHOD = "k-means++"
 
 
 # ── Fungsi 1: Ambil data Sales dari database ─────────────────────────────── #
@@ -143,15 +138,15 @@ def _fetch_sales_data(db: Session) -> pd.DataFrame:
 
 # ── Fungsi 2: Normalisasi data ───────────────────────────────────────────── #
 
-def _normalize_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, MinMaxScaler]:
+def _normalize_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, StandardScaler]:
     """
-    Normalisasi 3 kolom numerik ke rentang 0–1 menggunakan MinMaxScaler.
+    Normalisasi 3 kolom numerik menggunakan StandardScaler (z-score).
 
     Returns:
         Tuple of (DataFrame ternormalisasi, fitted scaler object)
     """
     numeric_cols = ["customer_baru", "quotation", "mrr"]
-    scaler = MinMaxScaler()
+    scaler = StandardScaler()
     data_norm = pd.DataFrame(
         scaler.fit_transform(df[numeric_cols]),
         columns=numeric_cols,
@@ -161,37 +156,34 @@ def _normalize_data(df: pd.DataFrame) -> Tuple[pd.DataFrame, MinMaxScaler]:
 
 # ── Fungsi 3: Jalankan clustering ─────────────────────────────────────────── #
 
-def _run_clustering(data_norm: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+def _run_clustering(data_norm: pd.DataFrame) -> np.ndarray:
     """
-    Jalankan Agglomerative Hierarchical Clustering dengan Ward linkage.
+    Jalankan K-Means++ Clustering.
 
     Returns:
-        Tuple of (labels array [0,1,2,...], linkage matrix Z)
+        labels array [0, 1, 2, ...]
     """
-    # Hitung linkage matrix untuk evaluasi cophenetic
-    Z = linkage(data_norm.values, method=LINKAGE_METHOD)
-
-    # Fit model clustering
-    model = AgglomerativeClustering(n_clusters=N_CLUSTERS, linkage=LINKAGE_METHOD)
-    labels = model.fit_predict(data_norm.values)
+    kmeans_pp = KMeans(n_clusters=N_CLUSTERS, init="k-means++", n_init=10, random_state=42)
+    labels = kmeans_pp.fit_predict(data_norm.values)
 
     logger.info(
-        f"cluster: AgglomerativeClustering fitted — "
-        f"n_clusters={N_CLUSTERS}, method={LINKAGE_METHOD}, "
+        f"cluster: KMeans++ fitted — "
+        f"n_clusters={N_CLUSTERS}, init=k-means++, "
+        f"inertia={kmeans_pp.inertia_:.4f}, "
         f"cluster distribution={np.bincount(labels).tolist()}"
     )
-    return labels, Z
+    return labels, kmeans_pp
 
 
 # ── Fungsi 4: Evaluasi kualitas clustering ────────────────────────────────── #
 
 def _evaluate_clustering(
-    data_norm: pd.DataFrame, labels: np.ndarray, Z: np.ndarray
+    data_norm: pd.DataFrame, labels: np.ndarray, kmeans_model: KMeans
 ) -> Dict[str, float]:
     """
-    Hitung 3 metrik evaluasi:
-      1. Cophenetic Correlation Coefficient
-      2. Silhouette Score
+    Hitung 3 metrik evaluasi K-Means++:
+      1. Silhouette Score
+      2. Davies-Bouldin Index
       3. BSS/TSS Ratio
 
     Returns:
@@ -199,62 +191,66 @@ def _evaluate_clustering(
     """
     values = data_norm.values
 
-    # 1. Cophenetic Correlation
-    c, _ = cophenet(Z, pdist(values))
-
-    # 2. Silhouette Score
+    # 1. Silhouette Score
     sil = silhouette_score(values, labels)
 
+    # 2. Davies-Bouldin Index
+    db_index = davies_bouldin_score(values, labels)
+
     # 3. BSS/TSS Ratio
+    # WCSS (Within-Cluster Sum of Squares) diambil dari inertia
+    wcss = kmeans_model.inertia_
+    # Hitung titik pusat keseluruhan data
     global_mean = np.mean(values, axis=0)
-    TSS = np.sum((values - global_mean) ** 2)
-
-    WSS = 0.0
-    for cluster_id in range(N_CLUSTERS):
-        cluster_mask = labels == cluster_id
-        if not np.any(cluster_mask):
-            continue
-        cluster_data = values[cluster_mask]
-        cluster_mean = np.mean(cluster_data, axis=0)
-        WSS += np.sum((cluster_data - cluster_mean) ** 2)
-
-    BSS = TSS - WSS
-    bss_tss = BSS / TSS if TSS > 0 else 0.0
+    # Hitung TSS (Total Sum of Squares)
+    tss = np.sum((values - global_mean) ** 2)
+    # Hitung BSS (Between-Cluster Sum of Squares)
+    bss = tss - wcss
+    # Rasio BSS/TSS
+    bss_tss = bss / tss if tss > 0 else 0.0
 
     metrics = {
-        "cophenetic_corr": round(float(c), 4),
         "silhouette_score": round(float(sil), 4),
+        "davies_bouldin_index": round(float(db_index), 4),
         "bss_tss_ratio": round(float(bss_tss), 4),
     }
 
     logger.info(
         f"cluster: evaluation — silhouette={metrics['silhouette_score']}, "
-        f"bss_tss={metrics['bss_tss_ratio']}, cophenetic={metrics['cophenetic_corr']}"
+        f"bss_tss={metrics['bss_tss_ratio']}, "
+        f"davies_bouldin={metrics['davies_bouldin_index']}"
     )
     return metrics
 
 
-# ── Fungsi 5: Adaptive cluster naming ─────────────────────────────────────── #
+# ── Fungsi 5: Cluster naming ─────────────────────────────────────────────── #
 
 def _adaptive_cluster_naming(
     data_norm: pd.DataFrame, labels: np.ndarray
 ) -> Dict[int, str]:
     """
-    Menggunakan mapping statis n=5 sesuai referensi.
+    Menggunakan mapping statis n=5 sesuai referensi cluster profiling K-Means++.
+
+    Mapping berdasarkan profil debug server (business_labels):
+      3: "High Efficiency"           (mrr tertinggi ~35.4M, quotation terendah)
+      0: "High Activity Volume Drivers" (customer tertinggi ~14.1, quotation terendah)
+      4: "Low Convertion Quality"    (cluster 0: moderate customer, quotation tinggi)
+      1: "Small Tier"                (semua rendah)
+      2: "Low Efficiency"            (customer & quotation tinggi, mrr terendah)
     """
     mapping = {
-        0 : 'Peak Revenue & Premium Efficiency',
-        1 : 'Core Growth & Stable Acquisition',
-        2 : 'Stagnant Acquisition & Slow Down',
-        3 : 'Low-Yield Operational',
-        4 : 'Hyper-Acquisition & Market Penetration'
+        0: "High Activity Volume Drivers",
+        1: "Small Tier",
+        2: "Low Efficiency",
+        3: "High Efficiency",
+        4: "Low Convertion Quality",
     }
 
     result = {}
     for cluster_id in range(N_CLUSTERS):
         result[cluster_id] = mapping.get(cluster_id, f"Cluster {cluster_id}")
 
-    logger.info(f"cluster: static naming (n=5) — {result}")
+    logger.info(f"cluster: static naming (n=5, k-means++) — {result}")
     return result
 
 
@@ -266,16 +262,16 @@ def run_full_clustering(db: Session) -> Dict:
 
     Alur:
       1. Fetch data Sales dari fact_kpi_performance
-      2. Normalisasi dengan MinMaxScaler
-      3. Jalankan Agglomerative Clustering (Ward, n=3)
-      4. Hitung metrik evaluasi (Silhouette, BSS/TSS, Cophenetic)
-      5. Tentukan nama cluster secara adaptif
+      2. Normalisasi dengan StandardScaler (z-score)
+      3. Jalankan K-Means++ (n=5, init='k-means++', n_init=10)
+      4. Hitung metrik evaluasi (Silhouette, BSS/TSS, Davies-Bouldin)
+      5. Tentukan nama cluster sesuai mapping statis
       6. Hapus data lama, simpan data baru ke cluster_result & cluster_evaluation
 
     Returns:
-        Dict berisi evaluation, data_table, scatter_3d (langsung bisa dikirim ke frontend)
+        Dict berisi evaluation, data_table, scatter_2d (langsung bisa dikirim ke frontend)
     """
-    logger.info("cluster: starting full clustering pipeline...")
+    logger.info("cluster: starting full clustering pipeline (K-Means++)...")
 
     # 1. Fetch data
     data_raw = _fetch_sales_data(db)
@@ -284,12 +280,12 @@ def run_full_clustering(db: Session) -> Dict:
     data_norm, scaler = _normalize_data(data_raw)
 
     # 3. Cluster
-    labels, Z = _run_clustering(data_norm)
+    labels, kmeans_model = _run_clustering(data_norm)
 
     # 4. Evaluate
-    metrics = _evaluate_clustering(data_norm, labels, Z)
+    metrics = _evaluate_clustering(data_norm, labels, kmeans_model)
 
-    # 5. Adaptive naming
+    # 5. Naming
     name_mapping = _adaptive_cluster_naming(data_norm, labels)
 
     # 6. Simpan ke database
@@ -322,9 +318,9 @@ def run_full_clustering(db: Session) -> Dict:
     eval_row = ClusterEvaluation(
         silhouette_score=metrics["silhouette_score"],
         bss_tss_ratio=metrics["bss_tss_ratio"],
-        cophenetic_corr=metrics["cophenetic_corr"],
+        davies_bouldin_index=metrics["davies_bouldin_index"],
         n_clusters=N_CLUSTERS,
-        method=LINKAGE_METHOD,
+        method=METHOD,
         n_observations=len(data_raw),
         computed_at=now,
     )
@@ -332,11 +328,11 @@ def run_full_clustering(db: Session) -> Dict:
 
     db.commit()
     logger.info(
-        f"cluster: ✓ pipeline complete — "
+        f"cluster: ✓ pipeline complete (K-Means++) — "
         f"{len(data_raw)} observations, {N_CLUSTERS} clusters saved to database"
     )
 
-    # 7. Build response (sama format dengan get_cluster_results)
+    # 7. Build response
     return _build_response(db)
 
 
@@ -348,7 +344,7 @@ def get_cluster_results(db: Session) -> Dict:
     Jika belum ada data, otomatis jalankan run_full_clustering() terlebih dahulu.
 
     Returns:
-        Dict berisi evaluation, data_table, scatter_3d, cluster_descriptions
+        Dict berisi evaluation, data_table, scatter_3d, scatter_2d, cluster_descriptions
     """
     # Cek apakah ada data evaluasi
     eval_row = db.query(ClusterEvaluation).order_by(
@@ -382,7 +378,7 @@ def _build_response(db: Session) -> Dict:
     evaluation = {
         "silhouette_score": eval_row.silhouette_score,
         "bss_tss_ratio": eval_row.bss_tss_ratio,
-        "cophenetic_corr": eval_row.cophenetic_corr,
+        "davies_bouldin_index": eval_row.davies_bouldin_index,
         "n_clusters": eval_row.n_clusters,
         "method": eval_row.method,
         "n_observations": eval_row.n_observations,
@@ -404,37 +400,30 @@ def _build_response(db: Session) -> Dict:
         for r in results
     ]
 
-
-    # Build scatter_3d (data ternormalisasi + cluster name)
-    scatter_3d = [
-        {
-            "customer_baru_norm": r.customer_baru_norm,
-            "quotation_norm": r.quotation_norm,
-            "mrr_norm": r.mrr_norm,
-            "cluster_name": r.cluster_name,
-        }
-        for r in results
-    ]
-
-    # Calculate PCA for 2D visualization
-    # PENTING: urutkan results berdasarkan observation_index agar enumerate(i) sesuai
-    import numpy as np
     results_ordered = sorted(results, key=lambda r: r.observation_index)
-    features = np.array([[r.customer_baru_norm, r.quotation_norm, r.mrr_norm] for r in results_ordered])
+    raw_values = np.array([
+        [r.customer_baru, r.quotation, r.mrr]
+        for r in results_ordered
+    ])
 
-    if len(features) > 1:
+    if len(raw_values) > 1:
+        from sklearn.preprocessing import StandardScaler as _SS
+        _scaler = _SS()
+        X_scaled_fresh = _scaler.fit_transform(raw_values)
+
         pca = PCA(n_components=2)
-        pca_result = pca.fit_transform(features)
+        pca_result = pca.fit_transform(X_scaled_fresh)
         explained_variance = pca.explained_variance_ratio_ * 100
+
+        pca_result[:, 1] *= -1
     else:
-        pca_result = np.zeros((len(features), 2))
+        pca_result = np.zeros((len(raw_values), 2))
         explained_variance = [0, 0]
 
     scatter_2d = [
         {
             "pca_x": float(pca_result[i][0]),
             "pca_y": float(pca_result[i][1]),
-            # year dan quarter sudah disimpan di ClusterResult saat run_full_clustering
             "periode": f"{r.year}-{r.quarter}",
             "customer_baru_norm": float(r.customer_baru_norm),
             "quotation_norm": float(r.quotation_norm),
@@ -444,38 +433,33 @@ def _build_response(db: Session) -> Dict:
         for i, r in enumerate(results_ordered)
     ]
 
-    # Cluster descriptions (template terstruktur)
+    # Cluster descriptions (template — dapat diedit di ClusterPage.tsx, konstanta CLUSTER_DESCRIPTIONS)
     cluster_descriptions = {
-        "Mass Acquisition Phase": (
-            "Cluster ini ditandai dengan tingkat akuisisi customer baru yang tinggi.\n\n"
-            "Karakteristik utama meliputi:\n"
-            "• Volume customer baru di atas rata-rata\n"
-            "• Quotation conversion rate bervariasi\n"
-            "• MRR yang kompetitif\n\n"
-            "Interpretasi bisnis: [Silakan diisi oleh pengguna]"
+        "High Efficiency": (
+            "Cluster ini menghasilkan MRR paling tinggi dengan sedikit quotation yang dikirimkan. Hal ini menunjukkan bahwa, kesepakatan nilai kontrak yang dihasilkan sangat tinggi."
+
         ),
-        "Premium-Focus Phase": (
-            "Cluster ini ditandai dengan fokus pada customer bernilai tinggi.\n\n"
-            "Karakteristik utama meliputi:\n"
-            "• Volume customer baru relatif rendah\n"
-            "• MRR (Monthly Recurring Revenue) paling tinggi\n"
-            "• Quotation conversion rate tinggi\n\n"
-            "Interpretasi bisnis: [Silakan diisi oleh pengguna]"
+        "High Activity Volume Drivers": (
+            "Cluster ini menghasilkan MRR dan quotation yang dikirimkan tertinggi kedua. Hal ini menunjukkan stabilitas kinerja dengan tingginya MRR yang didapatkan."
+
         ),
-        "Low-Conversion Phase": (
-            "Cluster ini ditandai dengan performa keseluruhan yang rendah.\n\n"
-            "Karakteristik utama meliputi:\n"
-            "• Volume customer baru paling rendah\n"
-            "• MRR di bawah rata-rata\n"
-            "• Quotation conversion rate rendah\n\n"
-            "Interpretasi bisnis: [Silakan diisi oleh pengguna]"
+        "Low Convertion Quality": (
+            "Cluster ini mengirimkan quotation yang sama seperti pada klaster 'High Efficiency' dan mendapatkan customer baru paling banyak. Tetapi MRR yang dihasilkan tidak sebanyak pada klaster 'High Efficiency'. Hal ini dapat disebabkan karena nilai kesepakatan kontrak yang dihasilkan rendah."
+
+        ),
+        "Small Tier": (
+            "Cluster ini menghasilkan MRR terendah kedua meskipun quotation yang dikirimkan cukup banyak. Hal ini dapat disebabkan oleh rendahnya tingkat kesepaktan yang terjadi."
+
+        ),
+        "Low Efficiency": (
+            "Cluster ini menghasilkan nilai MRR yang paling rendah meskipun paling banyak mengirimkan quotation. Jumlah customer baru yang diperoleh cukup tinggi. Rendahnya MRR yang diperoleh dapat disebabkan karena nilai kesepakatan kontrak rendah dan prospek pelanggan kurang bagus."
+
         ),
     }
 
     return {
         "evaluation": evaluation,
         "data_table": data_table,
-        "scatter_3d": scatter_3d,
         "scatter_2d": scatter_2d,
         "pca_variance": {
             "pc1": float(explained_variance[0]),

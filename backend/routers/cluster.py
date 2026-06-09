@@ -1,8 +1,8 @@
 """
-Cluster Router — Agglomerative Hierarchical Clustering Endpoints
+Cluster Router — Agglomerative K-Means++ Clustering Endpoints
 
-GET  /cluster/results   → Ambil hasil clustering (auto-compute jika belum ada)
-POST /cluster/recompute → Paksa re-compute clustering dari data terbaru
+GET  /cluster/results   → Ambil hasil clustering
+POST /cluster/recompute → Re-compute clustering dari data terbaru
 """
 
 import logging

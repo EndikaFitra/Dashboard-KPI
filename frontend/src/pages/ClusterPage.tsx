@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Target,
   BarChart3,
-  Activity,
+  ShieldCheck,
   TrendingUp,
   RefreshCw,
   Info,
@@ -19,44 +19,23 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getClusterResults, postRecomputeCluster, ClusterResultData, ClusterDataRow } from "@/api/client";
 
-// Template deskripsi (konstanta frontend)
-const CLUSTER_DESCRIPTIONS: Record<string, string> = {
-  "Peak Revenue & Premium Efficiency": `
- Basis pelanggan baru sedang-rendah, dokumen penawaran (quotation) paling sedikit, tetapi pendapatan bulanan berulang (MRR) mencapai puncak absolutnya (0.8488).
-  `.trim(),
 
-  "Core Growth & Stable Acquisition": `
-Fase ini menggambarkan kondisi "normal baru" atau kondisi operasional inti yang paling sehat. Proses penawaran berjalan efisien dan terarah, sehingga setiap proposal yang keluar memiliki peluang konversi tinggi menjadi pelanggan baru yang langsung berkontribusi pada pendapatan jangka menengah.
-  `.trim(),
-
-  "Stagnant Acquisition & Slow Down": `
-Kuartal-kuartal ini mencerminkan periode slowdown (perlambatan ekonomi atau kejenuhan produk). Tim sales tetap mengeluarkan tenaga untuk mengirimkan penawaran, namun pasar merespons dengan sangat pasif, menyebabkan konversi ke pelanggan baru mandek. Periode ini biasanya digunakan internal untuk evaluasi produk atau perubahan strategi.
-  `.trim(),
-
-  "Low-Yield Operational": `
-Fase ini adalah potret nyata dari pasar yang sangat kompetitif (red ocean market). Tim sales harus bekerja ekstra keras mengikuti banyak proses bidding atau tender formal (menguras banyak resource menerbitkan quotation), namun imbal hasil keuangannya relatif rendah karena marjin yang tertekan oleh perang harga atau banyak memenangkan akun berskala kecil.
-  `.trim(),
-
-  "Hyper-Acquisition & Market Penetration": `
-Kuartal-kuartal ini mencerminkan strategi growth hacking atau penetrasi pasar agresif (misal: peluncuran produk baru, promo diskon besar-besaran, atau skema gratis biaya awal). Secara kuantitas transaksi dan volume pelanggan baru, penjualan meledak luar biasa, meskipun efek monetisasinya (MRR) baru akan dipanen secara bertahap di masa depan.
-  `.trim(),
-};
 
 const getBadgeColor = (name: string) => {
-  if (name.includes("Peak")) return "bg-amber-100 text-amber-700 border-amber-200";
-  if (name.includes("Core")) return "bg-blue-100 text-blue-700 border-blue-200";
-  if (name.includes("Stagnant")) return "bg-slate-100 text-slate-700 border-slate-200";
-  if (name.includes("Low-Yield")) return "bg-red-100 text-red-700 border-red-200";
-  if (name.includes("Hyper")) return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (name.includes("High Efficiency"))             return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  if (name.includes("High Activity"))               return "bg-blue-100 text-blue-700 border-blue-200";
+  if (name.includes("Low Convertion"))              return "bg-red-100 text-red-700 border-red-200";
+  if (name.includes("Small Tier"))                  return "bg-slate-100 text-slate-700 border-slate-200";
+  if (name.includes("Low Efficiency"))                return "bg-amber-100 text-amber-700 border-amber-200";
   return "bg-gray-100 text-gray-700 border-gray-200";
 };
 
 const getPlotlyColor = (name: string) => {
-  if (name.includes("Peak")) return "rgb(245, 158, 11)";   // amber-500
-  if (name.includes("Core")) return "rgb(59, 130, 246)";   // blue-500
-  if (name.includes("Stagnant")) return "rgb(100, 116, 139)"; // slate-500
-  if (name.includes("Low-Yield")) return "rgb(239, 68, 68)";  // red-500
-  if (name.includes("Hyper")) return "rgb(16, 185, 129)";  // emerald-500
+  if (name.includes("High Efficiency"))    return "rgb(16, 185, 129)";   // emerald-500
+  if (name.includes("High Activity"))      return "rgb(59, 130, 246)";   // blue-500
+  if (name.includes("Low Convertion"))     return "rgb(239, 68, 68)";    // red-500
+  if (name.includes("Small Tier"))         return "rgb(100, 116, 139)";  // slate-500
+  if (name.includes("Low Efficiency"))   return "rgb(245, 158, 11)";   // amber-500
   return "rgb(156, 163, 175)"; // gray-400
 };
 
@@ -261,7 +240,7 @@ export default function ClusterPage() {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Segmentasi fase sales menggunakan Agglomerative Hierarchical Clustering
+              Segmentasi fase sales menggunakan K-Means++ Clustering
             </p>
           </div>
         </div>
@@ -282,38 +261,48 @@ export default function ClusterPage() {
 
       {/* ── Evaluation Metric Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-5 flex flex-col justify-center border-border/60 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground mb-3">
-            <h3 className="text-sm font-medium">Silhouette Score</h3>
-            <Target className="w-4 h-4 text-primary" />
+        {/* Card 1 — Silhouette Score */}
+        <Card className="p-5 flex flex-col justify-center border-l-4 border-l-blue-500 border-border/60 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-blue-700">Silhouette Score</h3>
+            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+              <Target className="w-4 h-4 text-blue-500" />
+            </div>
           </div>
-          <div className="text-2xl font-bold">
+          <div className="text-2xl font-bold text-blue-700">
             {data.evaluation.silhouette_score.toFixed(4)}
           </div>
           <p className="text-xs text-muted-foreground mt-1">Kualitas pemisahan antar cluster</p>
         </Card>
 
-        <Card className="p-5 flex flex-col justify-center border-border/60 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground mb-3">
-            <h3 className="text-sm font-medium">BSS/TSS Ratio</h3>
-            <BarChart3 className="w-4 h-4 text-emerald-500" />
+        {/* Card 2 — BSS/TSS Ratio */}
+        <Card className="p-5 flex flex-col justify-center border-l-4 border-l-emerald-500 border-border/60 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-emerald-700">BSS/TSS Ratio</h3>
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <BarChart3 className="w-4 h-4 text-emerald-500" />
+            </div>
           </div>
-          <div className="text-2xl font-bold">
+          <div className="text-2xl font-bold text-emerald-700">
             {(data.evaluation.bss_tss_ratio * 100).toFixed(2)}%
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Proporsi varians yang dijelaskan</p>
+          <p className="text-xs text-muted-foreground mt-1">Proporsi varians antar cluster</p>
         </Card>
 
-        <Card className="p-5 flex flex-col justify-center border-border/60 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground mb-3">
-            <h3 className="text-sm font-medium">Cophenetic Correlation</h3>
-            <Activity className="w-4 h-4 text-amber-500" />
+        {/* Card 3 — Davies-Bouldin Index */}
+        {/* ✏️ Edit label & deskripsi kartu ini di bawah jika diperlukan */}
+        <Card className="p-5 flex flex-col justify-center border-l-4 border-l-amber-500 border-border/60 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-amber-700">Davies-Bouldin Index</h3>
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4 text-amber-500" />
+            </div>
           </div>
-          <div className="text-2xl font-bold">
-            {data.evaluation.cophenetic_corr.toFixed(4)}
+          <div className="text-2xl font-bold text-amber-700">
+            {data.evaluation.davies_bouldin_index?.toFixed(4) ?? "-"}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Validitas struktur hierarki dendrogram
+            Separasi cluster (lebih kecil lebih baik)
           </p>
         </Card>
       </div>
@@ -377,7 +366,7 @@ export default function ClusterPage() {
         <Card className="flex flex-col shadow-sm border-border/60 overflow-hidden relative z-0">
           <div className="p-5 border-b border-border/50 bg-muted/20">
             <h3 className="font-semibold">
-              Visualisasi 2D Agglomerative Clustering (PCA)
+              Visualisasi 2D K-Means++ Clustering (PCA)
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               Setiap titik merepresentasikan satu kuartal. Hover untuk melihat periode &amp; detail nilai.
@@ -445,7 +434,7 @@ export default function ClusterPage() {
       {/* ── Cluster Descriptions ── */}
       <h3 className="text-lg font-semibold mt-10 mb-4">Interpretasi Cluster</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {Object.keys(CLUSTER_DESCRIPTIONS).map((name) => (
+        {Object.keys(data.cluster_descriptions).map((name) => (
           <Card key={name} className="overflow-hidden shadow-sm border-border/60">
             <div
               className={`px-5 py-3 border-b ${getBadgeColor(name).split(" ")[0]
@@ -459,8 +448,7 @@ export default function ClusterPage() {
               </div>
             </div>
             <div className="p-5 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed text-justify">
-              {CLUSTER_DESCRIPTIONS[name] ||
-                data.cluster_descriptions[name] ||
+              {data.cluster_descriptions[name] ||
                 "Tidak ada deskripsi."}
             </div>
           </Card>
